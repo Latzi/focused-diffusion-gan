@@ -48,7 +48,7 @@ LABEL="${LABEL:-}"                        # short label for the output folder wh
 OUT="$REPO/samples_Step11/${TAG}_${KIND}${STEP}_n${NUM}_r${RESP}${COLTAG}${LABEL:+_$LABEL}"
 mkdir -p "$OUT"
 echo "===== sampling $TAG step $STEP -> $OUT @ $(date) ====="
-srun python -u scripts/image_sample_fdgan_4ch.py \
+srun python -u scripts/image_sample_fdgan_4ch_globalnoise.py \
   --model_path "$CKPT" --bb_dir "$BB_DIR" --out_dir "$OUT" \
   --num_samples "$NUM" --batch_size 16 --seed 17 --timestep_respacing "$RESP" \
   --image_size 256 --num_channels 128 --num_res_blocks 2 --num_heads 1 --attention_resolutions 16 --use_scale_shift_norm False --resblock_updown False --learn_sigma True --class_cond False --dropout 0.0 \

@@ -9,8 +9,10 @@ Code and evaluation record for
 FDGAN generates images of a given object class from a bounding box. It is built on OpenAI's
 [guided-diffusion](https://github.com/openai/guided-diffusion) (ADM). We kept the ADM U-Net, the linear noise
 schedule, the EMA bookkeeping and the mixed-precision trainer, and wrote the rest ourselves: the training loop, the
-sampler, the dataset loader and the discriminators are our own files. The one ADM module we modify is the U-Net's first
-convolution, which we widen to take the box mask. The sections below say exactly what is ours and what is ADM's.
+sampler, the dataset loader and the discriminators are our own files. We do not edit the U-Net file; our training
+script widens its first convolution at run time so that it takes the box mask. The ADM modules are in the package as
+we ran them; four of them carry small leftovers from our earlier experiments that the FDGAN runs never call (listed in
+`docs/CODE_GUIDE.md`). The sections below say exactly what is ours and what is ADM's.
 
 ## What FDGAN adds to ADM
 
@@ -61,14 +63,27 @@ diffusion loss trains, and the mask channel stays. **ADM** is FDGAN\* with `--us
 
 | Folder | What is in it |
 |---|---|
-| `guided_diffusion/` | Our training loop `train_util_coco_fdgan_late_band.py` and our loader `image_datasets_Run2_3_10_COCO.py`. They import the unmodified ADM modules of guided-diffusion (`unet.py`, `gaussian_diffusion.py`, `respace.py`, `script_util.py`, `fp16_util.py`, `nn.py`, `resample.py`, `dist_util.py`, `logger.py`), which are being added to this folder from the cluster copy of the package. |
-| `scripts/` | `image_train_Run2_3_10_FDGAN_COCO_LateBand.py` (training entry point: discriminator, 4-channel U-Net, loop) and `image_sample_fdgan_4ch.py` (sampler). |
-| `jobs/` | The Slurm job files of every reported run, as submitted on OzSTAR, and `jobs/README.md` on how to read them. Paths are the cluster's. |
+| `guided_diffusion/` | Our training loop `train_util_coco_fdgan_late_band.py` and our loader `image_datasets_Run2_3_10_COCO.py`, next to the ADM modules of guided-diffusion as we ran them (`unet.py`, `gaussian_diffusion.py`, `respace.py`, `script_util.py`, `fp16_util.py`, `nn.py`, `resample.py`, `dist_util.py`, `logger.py`, `losses.py`). The `_lsun` and `_globalnoise` copies of the loop are explained in the code guide. |
+| `scripts/` | `image_train_Run2_3_10_FDGAN_COCO_LateBand.py` (training entry point: discriminator, 4-channel U-Net, loop) and `image_sample_fdgan_4ch.py` (sampler), with their `_lsun` and `_globalnoise` copies. |
+| `jobs/` | The Slurm job files of every reported run as submitted on OzSTAR, including the second training seed and the wide-band run, and `jobs/README.md` on how to read them. Paths are the cluster's. |
 | `tools/` | `make_sbatch_files.py` (writes the job files; all shared flags live there), `objeval_core.py` (object-level metrics), `real_color_stats.py` (colour statistics of the training images), `color_stats/` (the statistics we used). |
 | `evaluation/` | Notebooks, Colab cells, the metric sheets with every number in the paper, the bootstrap replicates, the script that builds the tables and intervals from the sheets, and the audit scripts. See `evaluation/README.md`. |
 | `figures/` | The scripts that build the sample grids, the final figure files and the editable architecture diagram. |
 | `downstream_yolo/` | Scripts of the downstream YOLO11 study (real images plus FDGAN images); the runs are in progress. |
 | `docs/CODE_GUIDE.md` | File-by-file guide: what each function does and where it departs from ADM. |
+| `setup.py`, `requirements.txt`, `environment_cluster.txt` | Package install, the pinned versions we used, and the full package list of the cluster environment. |
+
+## Installing
+
+```bash
+git clone https://github.com/Latzi/focused-diffusion-gan.git
+cd focused-diffusion-gan
+pip install -r requirements.txt
+pip install -e .
+```
+
+The runs were made with Python 3.10.8, torch 2.2.1, torchvision 0.17.1, numpy 1.24.2, Pillow 9.4.0, blobfile 2.1.1
+and mpi4py 3.1.4 on one A100 per run; `environment_cluster.txt` is the complete package list of that environment.
 
 ## Training and sampling as we ran them
 
@@ -89,6 +104,8 @@ The file name is `train_<dataset>_<row>.sh`. The rows differ only in the flags l
 | `fdgan_nonoise` | without localised noise | `--k_focus 0` |
 | `fdgan_globalnoise` | global noise, same energy | `--noise_option extra_gan_only_global` |
 | `fdgan_mask_smallD` | plus small ROI discriminator | `--enable_small_roi_d True` |
+| `fdgan_mask_rep2`, `adm_mask_rep2` | second training seed of FDGAN and FDGAN\* | same flags, a second independent run |
+| `fdgan_wideband35` | wide-band run | `--tmin_end 600 --band_width 350 --max_gan_per_microbatch 8` |
 
 Everything else is shared: 256 px, 128 base channels, 2 residual blocks, attention at 16, learned sigma, 1,000 linear
 diffusion steps, batch 16 in micro-batches of 8, fp16, lr 1e-4 annealed to zero at 200,000 iterations, EMA 0.9999.
@@ -119,7 +136,8 @@ sheets in `evaluation/sheets/`, and the audit scripts compare each sheet value w
 
 The three datasets are released separately:
 [object-centric-low-data-datasets](https://github.com/Latzi/object-centric-low-data-datasets) (Traffic Signs with
-images and YOLO labels; reconstruction assets for Cityscapes-Pedestrian and COCO potted plant).
+images and YOLO labels; reconstruction assets for Cityscapes-Pedestrian and COCO potted plant). The loader here reads
+one JSON box file per image; a script that writes those files from the release's box tables is on its way.
 
 ## Checkpoints and sample sets
 

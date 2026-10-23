@@ -25,8 +25,11 @@ Rows (the flags that differ are listed in `tools/make_sbatch_files.py`):
 | `fdgan_nonoise` | FDGAN without the localised noise |
 | `fdgan_globalnoise` | FDGAN with the same noise energy spread over the whole image |
 | `fdgan_mask_smallD` | FDGAN plus the small ROI discriminator |
+| `fdgan_mask_rep2`, `adm_mask_rep2` | second training seed of FDGAN and FDGAN\* on Cityscapes: the same files with a new tag, a second independent run |
+| `fdgan_wideband35` | the wide-band run on Cityscapes: `--tmin_end 600 --band_width 350 --max_gan_per_microbatch 8`, sampled with `--bump_tmin_rev 600 --bump_tmax_rev 950` |
 
-`*_lsun.sh` are the COCO runs; they start from an LSUN-pretrained ADM checkpoint instead of random weights.
+`*_lsun.sh` are the COCO runs; they start from an LSUN-pretrained ADM checkpoint instead of random weights. The
+Cityscapes global-noise pair calls the `_globalnoise` copies of the training script and the sampler.
 
 ## Training
 

@@ -1,14 +1,30 @@
 # Code guide
 
 This is a walk through the files we wrote, function by function, with the ADM origin stated where there is one.
-The code is the code that produced the paper's runs. Before publishing we rewrote a few module docstrings and comments
-that referred to our own working setup; no executable line changed.
+The code is the code that produced the paper's runs. Before publishing we rewrote the module docstrings and a few
+comments that referred to our own working setup, and we added a docstring to every function and class; no executable
+line changed.
+
+## The ADM modules
+
+`guided_diffusion/` holds the guided-diffusion package as it was on the cluster. Against OpenAI's repository,
+`unet.py`, `respace.py`, `nn.py`, `losses.py`, `logger.py`, `fp16_util.py` and `__init__.py` are byte-identical, and
+so is `setup.py`. Four modules carry small leftovers from our earlier experiments:
+
+- `dist_util.py`: `GPUS_PER_NODE` is 2 instead of 8.
+- `script_util.py`: a channel multiplier for 32 px images (`image_size == 32`).
+- `resample.py`: an `EarlyTimestepSampler` class, and `np.int` replaced by `int` in the loss-aware sampler for newer
+  numpy.
+- `gaussian_diffusion.py`: a helper `get_noise_scale_for_timestep`.
+
+None of these is called by the FDGAN scripts; the runs use the uniform timestep sampler and the 256 px model. We left
+them in so that the package is the one that ran.
 
 ## guided_diffusion/train_util_coco_fdgan_late_band.py
 
-Ours. It replaces ADM's `TrainLoop` (guided-diffusion `train_util.py`). The ADM parts we still call are
-`diffusion.training_losses`, `diffusion.q_sample`, `diffusion.p_mean_variance`, the `MixedPrecisionTrainer`, the EMA
-update and the schedule sampler.
+Ours. It replaces ADM's `TrainLoop` (guided-diffusion `train_util.py`, which is not shipped because nothing here
+imports it). The ADM parts we still call are `diffusion.training_losses`, `diffusion.q_sample`,
+`diffusion.p_mean_variance`, the `MixedPrecisionTrainer`, the EMA update and the schedule sampler.
 
 Helpers at the top of the file:
 
@@ -25,7 +41,7 @@ Helpers at the top of the file:
 - `MainDWithMaskAdapter`: wraps the main PatchGAN; concatenates image and mask, maps 4 to 3 channels with a 1 x 1
   convolution, then runs the PatchGAN.
 - `_inflate_first_conv_weight_if_needed`, `load_state_dict_flexible`: let a 3-channel ADM checkpoint load into the
-  4-channel model (the mask channel weights are filled from the RGB mean), and tolerate the wrapper prefix.
+  4-channel model and tolerate the wrapper prefix.
 
 `TrainLoop`:
 
@@ -63,8 +79,12 @@ Helpers at the top of the file:
 - `_save_debug_pairs`: every `image_save_every` steps, writes the perturbed input and the clean-image prediction of a
   few in-band samples with their boxes drawn, for eyeballing a run.
 
-`train_util_coco_fdgan_late_band_lsun.py` is the copy imported by the COCO job files, which start from an LSUN-trained
-ADM checkpoint.
+Two copies of the loop sit next to it. `train_util_coco_fdgan_late_band_lsun.py` is the one the COCO jobs import; it
+differs from the main file in three lines: when a 3-channel pretrained checkpoint is loaded into the 4-channel model,
+the mask-channel weights get the copy-mean initialisation (0.1 times the mean of the loaded RGB filters) instead of
+zeros, which matters only when a run starts from a checkpoint, as the COCO runs do from an LSUN-trained ADM.
+`train_util_coco_fdgan_late_band_globalnoise.py` is byte-identical to the main file; the Cityscapes global-noise job
+imports it through its own copy of the training script.
 
 ## guided_diffusion/image_datasets_Run2_3_10_COCO.py
 
@@ -87,7 +107,7 @@ Ours. The training entry point.
   and wraps the U-Net in `_BB4ChWrapper`, which concatenates `bb_mask * mask_gain` to the image and forwards fp16
   conversion. Then builds the discriminator, the loader and `TrainLoop`.
 
-`image_train_Run2_3_10_FDGAN_COCO_LateBand_lsun.py` differs in one line: it imports the `_lsun` loop.
+The `_lsun` and `_globalnoise` copies differ in one line each: the import of the matching copy of the loop.
 
 ## scripts/image_sample_fdgan_4ch.py
 
@@ -100,13 +120,16 @@ Ours. It replaces ADM's `image_sample.py`.
 - `sample_batch`: the reverse chain. Ancestral sampling with the fixed posterior variance (`--sigma_mode small`) or
   ADM's learned variance, or DDIM when the respacing starts with `ddim`. At in-band steps with
   `--roi_bump_mode predict` the network input is `x + sqrt(1 - alpha_bar) * k_focus * M * noise`, the prediction
-  from it drives the update, and the chain itself is never perturbed. `--mask_cfg_scale S` applies classifier-free
+  from it drives the update, and the chain itself is never perturbed. `--roi_bump_region global` spreads the same
+  perturbation energy over the whole image (the global-noise control); `--mask_cfg_scale S` applies classifier-free
   guidance on the mask channel in clean-image space: x0 = x0_box + (S - 1)(x0_box - x0_nobox), with the no-box pass on
   the unperturbed state; `--cfg_rescale` is the rescaling of Lin et al. against over-saturation. `--color_guide_mode`
   pulls the per-channel means of the clean estimate towards real-image colour statistics inside a window of steps.
 - `guidance_step`: optional gradient step from the saved discriminators (`--guide_mode`); off by default and not used
   for the paper's sets.
 - `main`: writes `sample_000000.png` onwards and `meta.json` with every box and the full argument list.
+
+`image_sample_fdgan_4ch_globalnoise.py` is byte-identical; the Cityscapes global-noise sampling job calls it by name.
 
 ## tools/
 

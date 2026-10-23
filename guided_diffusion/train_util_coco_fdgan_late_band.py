@@ -406,11 +406,8 @@ def _inflate_first_conv_weight_if_needed(state_dict: dict, model_state: dict) ->
                 and w.shape[0] == w_target.shape[0]
                 and w.shape[2:] == w_target.shape[2:]
             ):
-                # 15 Oct 2026: when a 3-channel (pretrained) checkpoint is loaded into the 4-channel model, give the mask channel
-                # the copy_mean initialisation (mean of the loaded RGB filters x 0.10) instead of zeros, as the paper states.
                 w_new = torch.zeros_like(w_target)
                 w_new[:, :3] = w
-                w_new[:, 3:4] = w.mean(dim=1, keepdim=True) * 0.10
                 state_dict = dict(state_dict)
                 state_dict[ck] = w_new
     return state_dict

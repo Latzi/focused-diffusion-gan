@@ -1,11 +1,11 @@
-# Packages imported by the code in this repository. The exact versions of the cluster environment that produced the
-# runs are listed in environment_cluster.txt (added with the cluster copy of the code).
-torch
-torchvision
-numpy
-Pillow
-blobfile
-mpi4py
+# The versions of the cluster environment that produced the runs (Python 3.10.8; the full list is in
+# environment_cluster.txt). Newer versions of torch should work for sampling; we have not tested them for training.
+torch==2.2.1
+torchvision==0.17.1
+numpy==1.24.2
+Pillow==9.4.0
+blobfile==2.1.1
+mpi4py==3.1.4
 # evaluation notebooks and audit scripts
 pandas
 openpyxl

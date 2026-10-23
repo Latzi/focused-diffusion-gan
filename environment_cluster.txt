@@ -1,0 +1,113 @@
+argon2-cffi @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/argon2cffi/argon2-cffi-21.3.0
+argon2-cffi-bindings @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/argon2cffibindings/argon2-cffi-bindings-21.2.0
+astropy @ file:///dev/shm/easybuild/astropy/5.2.2/gfbf-2022b/astropy/astropy-5.2.2
+asttokens @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/asttokens/asttokens-2.2.1
+async-generator @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/async_generator/async_generator-1.10
+backcall @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/backcall/backcall-0.2.0
+beautifulsoup4 @ file:///dev/shm/easybuild/BeautifulSoup/4.11.1/GCCcore-12.2.0/BeautifulSoup/beautifulsoup4-4.11.1
+beniget @ file:///dev/shm/easybuild/SciPybundle/2023.02/gfbf-2022b/beniget/beniget-0.4.1
+bleach @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/bleach/bleach-6.0.0
+blobfile==2.1.1
+Bottleneck @ file:///dev/shm/easybuild/SciPybundle/2023.02/gfbf-2022b/Bottleneck/Bottleneck-1.3.5
+comm @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/comm/comm-0.1.3
+contourpy @ file:///dev/shm/easybuild/matplotlib/3.7.0/gfbf-2022b/contourpy/contourpy-1.0.7
+cycler @ file:///dev/shm/easybuild/matplotlib/3.7.0/gfbf-2022b/Cycler/cycler-0.11.0
+deap @ file:///dev/shm/easybuild/SciPybundle/2023.02/gfbf-2022b/deap/deap-1.3.3
+debugpy @ file:///apps/sources/i/IPython/extensions/debugpy-1.6.7-py2.py3-none-any.whl
+defusedxml @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/defusedxml/defusedxml-0.7.1
+deprecation @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/deprecation/deprecation-2.1.0
+dulwich @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/dulwich/dulwich-0.20.50
+entrypoints @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/entrypoints/entrypoints-0.4
+executing @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/executing/executing-1.2.0
+extension-helpers @ file:///dev/shm/easybuild/astropy/5.2.2/gfbf-2022b/extensionhelpers/extension-helpers-1.0.0
+fastjsonschema @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/fastjsonschema/fastjsonschema-2.17.1
+filelock==3.13.3
+fonttools @ file:///dev/shm/easybuild/matplotlib/3.7.0/gfbf-2022b/fonttools/fonttools-4.38.0
+fsspec==2024.3.1
+gast @ file:///dev/shm/easybuild/SciPybundle/2023.02/gfbf-2022b/gast/gast-0.5.3
+-e git+https://github.com/Latzi/guided-diffusion.git@5e8904670335587473cd4d08c2901bc1aad925a6#egg=guided_diffusion
+h5py @ file:///dev/shm/easybuild/h5py/3.8.0/foss-2022b/h5py-3.8.0
+hatchling @ file:///apps/sources/i/IPython/extensions/hatchling-1.18.0-py3-none-any.whl
+install==1.3.5
+ipykernel @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/ipykernel/ipykernel-6.24.0
+ipython @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/ipython/ipython-8.14.0
+ipython-genutils @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/ipython_genutils/ipython_genutils-0.2.0
+ipywidgets @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/ipywidgets/ipywidgets-8.0.7
+jedi @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/jedi/jedi-0.18.2
+Jinja2==3.1.3
+jsonschema @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/jsonschema/jsonschema-4.17.3
+jupyter_client @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/jupyter_client/jupyter_client-8.3.0
+jupyter_core @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/jupyter_core/jupyter_core-5.3.1
+jupyter_packaging @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/jupyter_packaging/jupyter_packaging-0.12.3
+jupyterlab-pygments @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/jupyterlab_pygments/jupyterlab_pygments-0.2.2
+jupyterlab-widgets @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/jupyterlab_widgets/jupyterlab_widgets-3.0.8
+kiwisolver @ file:///dev/shm/easybuild/matplotlib/3.7.0/gfbf-2022b/kiwisolver/kiwisolver-1.4.4
+lxml @ file:///dev/shm/easybuild/lxml/4.9.2/GCCcore-12.2.0/lxml-4.9.2
+MarkupSafe==2.1.5
+matplotlib @ file:///dev/shm/easybuild/matplotlib/3.7.0/gfbf-2022b/matplotlib/matplotlib-3.7.0
+matplotlib-inline @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/matplotlibinline/matplotlib-inline-0.1.2
+mistune @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/mistune/mistune-0.8.4
+mpi4py @ file:///dev/shm/easybuild/mpi4py/3.1.4/gompi-2022b/mpi4py/mpi4py-3.1.4
+mpmath @ file:///dev/shm/easybuild/SciPybundle/2023.02/gfbf-2022b/mpmath/mpmath-1.2.1
+nbclient @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/nbclient/nbclient-0.6.3
+nbconvert @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/nbconvert/nbconvert-6.5.3
+nbformat @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/nbformat/nbformat-5.4.0
+nest-asyncio @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/nest_asyncio/nest_asyncio-1.5.6
+networkx==3.2.1
+notebook @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/notebook/notebook-6.4.0
+numexpr @ file:///dev/shm/easybuild/SciPybundle/2023.02/gfbf-2022b/numexpr/numexpr-2.8.4
+numpy @ file:///dev/shm/easybuild/SciPybundle/2023.02/gfbf-2022b/numpy/numpy-1.24.2
+nvidia-cublas-cu12==12.1.3.1
+nvidia-cuda-cupti-cu12==12.1.105
+nvidia-cuda-nvrtc-cu12==12.1.105
+nvidia-cuda-runtime-cu12==12.1.105
+nvidia-cudnn-cu12==8.9.2.26
+nvidia-cufft-cu12==11.0.2.54
+nvidia-curand-cu12==10.3.2.106
+nvidia-cusolver-cu12==11.4.5.107
+nvidia-cusparse-cu12==12.1.0.106
+nvidia-nccl-cu12==2.19.3
+nvidia-nvjitlink-cu12==12.4.99
+nvidia-nvtx-cu12==12.1.105
+packaging @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/packaging/packaging-23.1
+pandas @ file:///dev/shm/easybuild/SciPybundle/2023.02/gfbf-2022b/pandas/pandas-1.5.3
+pandocfilters @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/pandocfilters/pandocfilters-1.5.0
+parso @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/parso/parso-0.8.3
+pathspec @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/pathspec/pathspec-0.11.1
+pickleshare @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/pickleshare/pickleshare-0.7.5
+Pillow @ file:///dev/shm/easybuild/Pillow/9.4.0/GCCcore-12.2.0/Pillow-9.4.0
+platformdirs @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/platformdirs/platformdirs-2.6.2
+ply @ file:///dev/shm/easybuild/SciPybundle/2023.02/gfbf-2022b/ply/ply-3.11
+poetry @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/poetry/poetry-1.2.2
+poetry-core @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/poetrycore/poetry-core-1.3.2
+poetry-plugin-export @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/poetry_plugin_export/poetry_plugin_export-1.2.0
+prometheus-client @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/prometheus_client/prometheus_client-0.17.0
+prompt-toolkit @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/prompt_toolkit/prompt_toolkit-3.0.39
+pure-eval @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/pure_eval/pure_eval-0.2.2
+pybind11 @ file:///dev/shm/easybuild/pybind11/2.10.3/GCCcore-12.2.0/pybind11-2.10.3
+pycryptodomex==3.20.0
+pyerfa @ file:///dev/shm/easybuild/astropy/5.2.2/gfbf-2022b/pyerfa/pyerfa-2.0.0.3
+pythran @ file:///dev/shm/easybuild/SciPybundle/2023.02/gfbf-2022b/pythran/pythran-0.12.1
+PyYAML @ file:///dev/shm/easybuild/PyYAML/6.0/GCCcore-12.2.0/PyYAML-6.0
+pyzmq @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/pyzmq/pyzmq-25.1.0
+scipy==1.10.1
+Send2Trash @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/Send2Trash/Send2Trash-1.8.2
+shellingham @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/shellingham/shellingham-1.5.0.post1
+soupsieve @ file:///dev/shm/easybuild/BeautifulSoup/4.11.1/GCCcore-12.2.0/soupsieve/soupsieve-2.3.2.post1
+stack-data @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/stack_data/stack_data-0.6.2
+sympy==1.12
+terminado @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/terminado/terminado-0.17.1
+testpath @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/testpath/testpath-0.6.0
+timm==0.5.4
+tinycss2 @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/tinycss2/tinycss2-1.2.1
+tomlkit @ file:///apps/sources/i/IPython/extensions/tomlkit-0.11.8-py3-none-any.whl
+torch==2.2.1
+torchvision==0.17.1
+tornado @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/tornado/tornado-6.3.2
+tqdm==4.66.2
+traitlets @ file:///apps/sources/i/IPython/extensions/traitlets-5.9.0-py3-none-any.whl
+triton==2.2.0
+trove-classifiers @ file:///apps/sources/i/IPython/extensions/trove_classifiers-2023.5.24-py3-none-any.whl
+typing_extensions==4.10.0
+urllib3==2.2.1
+widgetsnbextension @ file:///dev/shm/easybuild/IPython/8.14.0/GCCcore-12.2.0/widgetsnbextension/widgetsnbextension-4.0.8

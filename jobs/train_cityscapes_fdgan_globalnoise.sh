@@ -26,7 +26,7 @@ for c in /fred/oz097/latzi/Diffusion_ProjectedGAN/guided-diffusion/datasets/City
 [ -n "$BB_DIR" ] || { echo "no box folder found among: /fred/oz097/latzi/Diffusion_ProjectedGAN/guided-diffusion/datasets/Cityscapes_3009_bb"; exit 1; }
 [ -d "$DATA_DIR" ] || { echo "no image folder: $DATA_DIR"; exit 1; }
 grep -q "bb_is_xywh" guided_diffusion/image_datasets_Run2_3_10_COCO.py || { echo "guided_diffusion/image_datasets_Run2_3_10_COCO.py is not the 2026 loader - upload the package file first"; exit 1; }
-grep -q "gan_warmup_remaining" guided_diffusion/train_util_coco_fdgan_late_band.py || { echo "guided_diffusion/train_util_coco_fdgan_late_band.py is not the 2026 loop - upload the package file first"; exit 1; }
+grep -q "extra_gan_only_global" guided_diffusion/train_util_coco_fdgan_late_band_globalnoise.py || { echo "guided_diffusion/train_util_coco_fdgan_late_band_globalnoise.py is missing - upload it first"; exit 1; }
 echo "DATA_DIR=$DATA_DIR  BB_DIR=$BB_DIR  ($(ls "$DATA_DIR" | wc -l) images, $(ls "$BB_DIR" | wc -l) box files)"
 TAG="cityscapes_fdgan_globalnoise"
 CKPT_DIR="$REPO/checkpoints_Step11/$TAG"
@@ -37,9 +37,8 @@ mkdir -p "$CKPT_DIR" "$LOG_DIR" "$IMG_DIR"
 RESUME=$(ls -1 "$CKPT_DIR"/model*.pt 2>/dev/null | sed -E 's/.*model([0-9]+)\.pt/\1 &/' | sort -n | tail -1 | cut -d' ' -f2 || true)
 RESUME_ARG=""
 if [ -n "${RESUME:-}" ]; then RESUME_ARG="--resume_checkpoint $RESUME"; echo "resuming from $RESUME"; else echo "starting fresh"; fi
-echo "dataset extra flags: (none)"
 echo "===== $TAG @ $(date) ====="
-srun python -u scripts/image_train_Run2_3_10_FDGAN_COCO_LateBand.py \
+srun python -u scripts/image_train_Run2_3_10_FDGAN_COCO_LateBand_globalnoise.py \
   --data_dir "$DATA_DIR" --bb_dir "$BB_DIR" \
   --log_dir "$LOG_DIR" --checkpoint_dir "$CKPT_DIR" --image_save_dir "$IMG_DIR" \
   --image_size 256 --num_channels 128 --num_res_blocks 2 --num_heads 1 --attention_resolutions 16 --use_scale_shift_norm False --resblock_updown False --learn_sigma True --class_cond False --dropout 0.0 \
