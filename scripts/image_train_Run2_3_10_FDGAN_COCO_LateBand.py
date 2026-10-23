@@ -86,6 +86,10 @@ def _filter_kwargs_for_call(fn, kwargs):
 
 
 def create_argparser():
+    """Every setting of a run with its default: data, optimiser, output, discriminator, band, adversarial and
+    reconstruction weights, ANPM, small discriminator, colour terms, checkpointing and the mask channel, plus the ADM
+    model and diffusion flags from script_util. The job files override what differs per row.
+    """
     defaults = dict(
         # data
         data_dir="",
@@ -197,6 +201,9 @@ def create_argparser():
 
 
 def main():
+    """Build the ADM model and diffusion, widen the U-Net input to four channels when the box mask is used, build the
+    discriminator, the loader and the training loop, and train.
+    """
     args = create_argparser().parse_args()
 
     if not args.data_dir:

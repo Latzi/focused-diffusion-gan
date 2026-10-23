@@ -111,8 +111,9 @@ def load_data(
     bb_xyxy_end_inclusive: bool = True,
     resize_if_needed: bool = False,
 ):
-    """
-    Create a generator that yields batches forever.
+    """Infinite generator of (images, cond) batches from data_dir, with the boxes read from bb_dir (or the FDGAN_BB_DIR
+    variable, or a box folder inferred next to data_dir). class_cond and random_crop are accepted for compatibility
+    with guided-diffusion and ignored.
     """
     if not data_dir:
         raise ValueError("unspecified data directory")
@@ -150,6 +151,10 @@ def load_data(
 
 
 class ImageDataset(Dataset):
+    """Images with one bounding box each. The box comes from <bb_dir>/<stem>.json (or a JSON file next to the image), is
+    converted to exclusive corner coordinates and is mirrored with the image on a random flip. The file list is
+    sharded by rank for distributed runs.
+    """
     def __init__(
         self,
         image_paths: List[str],
@@ -184,6 +189,7 @@ class ImageDataset(Dataset):
         return len(self.local_images)
 
     def _open_image(self, path: str) -> Image.Image:
+        """Open an image as RGB, through blobfile for remote paths."""
         if bf is not None and (path.startswith("gs://") or path.startswith("az://") or path.startswith("s3://")):
             with bf.BlobFile(path, "rb") as f:
                 img = Image.open(f).convert("RGB")
@@ -193,6 +199,9 @@ class ImageDataset(Dataset):
 
     def _load_bb_json(self, stem: str, img_path: str) -> Dict[str, Any]:
         # Preferred: <bb_dir>/<stem>.json
+        """Read the box of an image from its JSON file. Accepts the key sets x/y/w/h, x1/y1/x2/y2 and xmin/ymin/xmax/ymax
+        and returns {'x', 'y', 'w', 'h'} as stored.
+        """
         bb_path = os.path.join(self.bb_dir, stem + ".json")
         if not os.path.exists(bb_path):
             # Fallback: alongside the image
@@ -234,6 +243,9 @@ class ImageDataset(Dataset):
         return {"x": int(x), "y": int(y), "w": int(w), "h": int(h)}
 
     def __getitem__(self, idx: int):
+        """The image as a float32 CHW array in [-1, 1] and the dictionary {'image_filenames', 'flip', 'bb'}. The box is
+        clamped to the image, converted to the format selected by bb_is_xywh and mirrored if the image was flipped.
+        """
         path = self.local_images[idx]
         filename = os.path.basename(path)
         stem = os.path.splitext(filename)[0]

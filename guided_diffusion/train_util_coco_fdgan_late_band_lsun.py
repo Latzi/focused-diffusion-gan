@@ -45,6 +45,7 @@ INITIAL_LOG_LOSS_SCALE = 20.0
 # Device helpers (safe for multi-GPU + LOCAL_RANK)
 # ---------------------------------------------------------------------------
 def _get_local_rank() -> int:
+    """Local rank from the environment (LOCAL_RANK, then the Slurm and MPI variables); 0 when none is set."""
     try:
         return int(os.environ.get("LOCAL_RANK", "0"))
     except Exception:
@@ -52,6 +53,7 @@ def _get_local_rank() -> int:
 
 
 def _get_device() -> torch.device:
+    """The CUDA device of this rank, or the CPU when CUDA is not available."""
     if torch.cuda.is_available():
         lr = _get_local_rank()
         torch.cuda.set_device(lr)
@@ -81,14 +83,17 @@ torch.backends.cudnn.allow_tf32 = True
 
 
 def _dist_is_ready() -> bool:
+    """True when torch.distributed is initialised."""
     return dist.is_available() and dist.is_initialized()
 
 
 def _world_size() -> int:
+    """Number of ranks, 1 without torch.distributed."""
     return dist.get_world_size() if _dist_is_ready() else 1
 
 
 def _rank() -> int:
+    """This process's rank, 0 without torch.distributed."""
     return dist.get_rank() if _dist_is_ready() else 0
 
 
@@ -96,6 +101,7 @@ def _rank() -> int:
 # Helpers for safe "freeze D params during G update"
 # ---------------------------------------------------------------------------
 def _unwrap_ddp(m: nn.Module) -> nn.Module:
+    """The module inside a DistributedDataParallel wrapper, or the module itself."""
     return m.module if hasattr(m, "module") else m
 
 
@@ -185,6 +191,9 @@ def _build_bb_mask_xyxy(
     *,
     bb_is_xywh: bool = False,
 ) -> Tuple[torch.Tensor, List[Tuple[int, int, int, int]]]:
+    """Rasterise the boxes of a batch into a binary mask of shape (B, 1, H, W). Also returns the clamped (x1, y1, x2, y2)
+    boxes the mask was built from.
+    """
     mask = torch.zeros((B, 1, H, W), device=device, dtype=dtype)
     bbs: List[Tuple[int, int, int, int]] = []
     for j in range(B):
@@ -195,6 +204,7 @@ def _build_bb_mask_xyxy(
 
 
 def _bbox_area_frac(bb_xyxy: Tuple[int, int, int, int], H: int, W: int) -> float:
+    """Area of the box as a fraction of the image area."""
     x1, y1, x2, y2 = bb_xyxy
     area = max(0, x2 - x1) * max(0, y2 - y1)
     return float(area) / float(H * W + 1e-8)
@@ -232,6 +242,9 @@ class WeightedLSGANLoss(nn.Module):
 # DiffAug: integer translate (reflect pad)
 # ---------------------------------------------------------------------------
 def diffaug_translate(x: torch.Tensor, px: int) -> torch.Tensor:
+    """Shift every sample of a batch by its own random integer offset of at most px pixels, with reflect padding. Used on
+    the crops fed to the small discriminator.
+    """
     if px <= 0:
         return x
     B, C, H, W = x.shape
@@ -335,6 +348,9 @@ class SmallROIPatchD(nn.Module):
 # Main D wrapper (RGB+mask -> 3ch adapter -> PatchGAN)
 # ---------------------------------------------------------------------------
 class MainDWithMaskAdapter(nn.Module):
+    """The main discriminator with the box mask as an extra input. Image and mask are concatenated, a 1 x 1 convolution
+    maps the four channels to three, and the PatchGAN scores the result. With use_mask=False it is the plain PatchGAN.
+    """
     def __init__(self, patch_d: nn.Module, use_mask: bool = True):
         super().__init__()
         self.use_mask = use_mask
@@ -517,6 +533,14 @@ class TrainLoop:
         # (number of *local* steps after resume; i.e., counts from 0 after restart)
         g_adv_warmup_steps_if_no_d_ckpt: int = 2000,
     ):
+        """All settings of a run; the job files pass them as flags and the README lists the values behind the paper's
+        rows. Groups: band (tmin_start, tmin_end, band_width, tmax_cap, band_ramp_steps), adversarial weight
+        (gan_initial_scale, gan_final_scale, gan_warmup_steps), reconstruction weights (l1_initial_scale,
+        l1_final_scale, l1_bg_frac, lambda_enhanced, color_stats_scale, sat_penalty_scale), ANPM (noise_option,
+        k_focus), discriminator (lr_D, betas_D, r1_gamma_main, r1_every_main, use_mask_adapter), small discriminator
+        (enable_small_roi_d, roi_size, roi_pad_ratio, train_roi_frac_cap), mask channel (use_bb_mask_cond,
+        bb_mask_key), checkpointing of the discriminators.
+        """
         assert discriminator is not None, "You must pass a discriminator module."
 
         self.model = model
@@ -729,18 +753,28 @@ class TrainLoop:
     # Schedule helpers
     # ---------------------------
     def _max_t(self) -> int:
+        """Index of the noisiest timestep, T - 1."""
         return int(getattr(self.diffusion, "num_timesteps", 1000)) - 1
 
     def _to_reverse_t(self, t_fwd: torch.Tensor) -> torch.Tensor:
+        """Forward timestep to reverse-time index: 0 is the noisiest state, T - 1 the cleanest."""
         return self._max_t() - t_fwd
 
     def _current_band_edges(self, global_step: int) -> Tuple[int, int]:
+        """Lower and upper edge of the adversarial band at this step, in reverse-time units. The lower edge moves
+        linearly from tmin_start to tmin_end over band_ramp_steps; the upper edge is the lower edge plus band_width,
+        capped at tmax_cap.
+        """
         p = min(1.0, float(global_step) / float(self.band_ramp_steps))
         tmin = int(round(self.tmin_start + p * (self.tmin_end - self.tmin_start)))
         tmax = min(self.tmax_cap, tmin + self.band_width)
         return tmin, tmax
 
     def _gan_scale(self, t_rev: torch.Tensor, global_step: Optional[int] = None) -> torch.Tensor:
+        """Per-sample weight lambda_GAN(t) of the adversarial terms: exponential in reverse time, from gan_initial_scale
+        at the noisiest state to gan_final_scale at the cleanest. The optional ramp after the warm-up and the cap were
+        not used in our runs.
+        """
         max_t = float(self._max_t())
         decay = math.log(self.gan_final_scale / self.gan_initial_scale) / max_t
         scale = self.gan_initial_scale * torch.exp(decay * t_rev.float())
@@ -760,6 +794,9 @@ class TrainLoop:
         return scale
 
     def _l1_scale(self, t_rev: torch.Tensor) -> torch.Tensor:
+        """Per-sample weight of the L1 terms, same exponential form. With equal initial and final values, as in our runs,
+        it is a constant.
+        """
         max_t = float(self._max_t())
         decay = math.log(self.l1_final_scale / self.l1_initial_scale) / max_t
         return self.l1_initial_scale * torch.exp(decay * t_rev.float())
@@ -779,6 +816,9 @@ class TrainLoop:
     # Checkpoint / EMA helpers (generator)
     # ---------------------------
     def _load_and_sync_parameters(self):
+        """Load the generator from the resume checkpoint (a 3-channel checkpoint fits the 4-channel model through
+        load_state_dict_flexible) and broadcast it to all ranks.
+        """
         resume_checkpoint = find_resume_checkpoint() or self.resume_checkpoint
         if resume_checkpoint:
             self.resume_step = parse_resume_step_from_filename(resume_checkpoint)
@@ -788,6 +828,7 @@ class TrainLoop:
         dist_util.sync_params(self.model.parameters())
 
     def _load_ema_parameters(self, rate):
+        """Load the EMA weights that go with the resume checkpoint, or start them from the current weights."""
         ema_params = copy.deepcopy(self.mp_trainer.master_params)
         main_checkpoint = find_resume_checkpoint() or self.resume_checkpoint
         ema_checkpoint = find_ema_checkpoint(main_checkpoint, self.resume_step, rate)
@@ -800,6 +841,7 @@ class TrainLoop:
         return ema_params
 
     def _load_optimizer_state(self):
+        """Load the generator optimiser state saved next to the resume checkpoint, if there is one."""
         main_checkpoint = find_resume_checkpoint() or self.resume_checkpoint
         opt_checkpoint = bf.join(bf.dirname(main_checkpoint), f"opt{self.resume_step:06d}.pt")
         if bf.exists(opt_checkpoint):
@@ -831,6 +873,7 @@ class TrainLoop:
         return out
 
     def _d_paths_for_step(self, step: int, base_dir: str) -> Dict[str, str]:
+        """File names of the discriminator weights and optimiser states of a step, in base_dir."""
         return {
             "D_main": bf.join(base_dir, f"D_main{step:06d}.pt"),
             "optD_main": bf.join(base_dir, f"optD_main{step:06d}.pt"),
@@ -909,6 +952,9 @@ class TrainLoop:
     # Main loop
     # ---------------------------
     def run_loop(self):
+        """Train until lr_anneal_steps: one optimisation step per batch, a log line every log_interval steps, a
+        checkpoint every save_interval steps and once more at the end.
+        """
         while (not self.lr_anneal_steps) or (self.step + self.resume_step < self.lr_anneal_steps):
             for batch_data in self.data:
                 # 11 Oct 2026 stop guard: the data generator is infinite, so without this check the loop never returns to the
@@ -935,6 +981,9 @@ class TrainLoop:
             self.save()
 
     def run_step(self, batch, cond):
+        """One optimisation step of the generator: forward_backward over the micro-batches (which also updates the
+        discriminators), optimiser step, EMA update, learning-rate anneal, logging.
+        """
         self.opt.zero_grad(set_to_none=True)
         self.opt_D.zero_grad(set_to_none=True)
         if self.opt_small_D is not None:
@@ -950,11 +999,16 @@ class TrainLoop:
         self.log_step()
 
     def forward_backward(self, batch, cond):
-        """
-        Microbatch accumulation:
-          - backward(diffusion_loss)
-          - if GAN-active: update D(s), then backward(extra_g_loss)
-        WITH per-step aggregation across microbatches for logging.
+        """One optimisation step over the micro-batches. For every micro-batch: sample the timesteps, mark the samples
+        whose reverse-time index lies in the band (none during the warm-up), build the box mask (handed to the U-Net
+        through model_kwargs when use_bb_mask_cond is set), compute ADM's diffusion loss on every sample with the
+        in-band samples scaled by diffusion_in_band_weight, and run its backward pass. Then, for the in-band samples
+        (at most max_gan_per_microbatch): draw the ANPM noise, form the perturbed x_t, predict the clean image, update
+        the main discriminator on (real image, mask) against (prediction, mask) with the timestep-weighted
+        least-squares loss and R1, and accumulate the generator's adversarial loss through the frozen discriminator,
+        the L1, background L1 and box MSE terms, the small-discriminator pair when enabled, and the colour and
+        saturation terms; their sum gets its own backward pass. The logs are aggregated over the micro-batches and
+        written once per step.
         """
         self.mp_trainer.zero_grad()
 
@@ -1512,10 +1566,14 @@ class TrainLoop:
     # EMA / LR / Saving
     # ---------------------------
     def _update_ema(self):
+        """EMA update of the generator weights, as in guided-diffusion."""
         for rate, params in zip(self.ema_rate, self.ema_params):
             update_ema(params, self.mp_trainer.master_params, rate=rate)
 
     def _anneal_lr(self):
+        """Linear decay of the generator learning rate to zero at lr_anneal_steps, and the same relative decay for the
+        discriminator optimisers.
+        """
         if not self.lr_anneal_steps:
             return
         frac_done = (self.step + self.resume_step) / self.lr_anneal_steps
@@ -1535,6 +1593,7 @@ class TrainLoop:
                 pg["lr"] = base * (new_lr / max(self.lr, 1e-12))
 
     def log_step(self):
+        """Log the step and the sample count and, with the mask channel on, the weights of the mask input."""
         logger.logkv("step", self.step + self.resume_step)
 
         try:
@@ -1638,10 +1697,12 @@ def parse_resume_step_from_filename(filename: str) -> int:
 
 
 def find_resume_checkpoint():
+    """Kept from guided-diffusion; always None here, the job files pass --resume_checkpoint explicitly."""
     return None
 
 
 def find_ema_checkpoint(main_checkpoint, step, rate):
+    """Path of the EMA file that goes with a model checkpoint, if it exists."""
     if main_checkpoint is None:
         return None
     filename = f"ema_{rate}_{(step):06d}.pt"

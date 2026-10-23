@@ -63,6 +63,9 @@ from guided_diffusion.script_util import (
 
 # ----------------------------------------------------------------------------- boxes and masks
 def load_bbs(bb_dir):
+    """Read every box JSON in bb_dir in sorted file order; returns a list of (box dict, file stem). Accepts the same key
+    variants as the training loader.
+    """
     out = []
     for name in sorted(os.listdir(bb_dir)):
         if not name.endswith(".json"):
@@ -88,6 +91,7 @@ def load_bbs(bb_dir):
 
 
 def bb_to_xyxy(bb, H, W, bb_is_xywh, end_inclusive):
+    """Box dict to clamped exclusive corner coordinates, for both stored formats."""
     x0, y0 = int(bb["x"]), int(bb["y"])
     if bb_is_xywh:
         x1, y1 = x0 + int(bb["w"]), y0 + int(bb["h"])
@@ -101,12 +105,14 @@ def bb_to_xyxy(bb, H, W, bb_is_xywh, end_inclusive):
 
 
 def xyxy_to_mask(x0, y0, x1, y1, H, W, device):
+    """Binary (1, H, W) mask of a box."""
     m = th.zeros((1, H, W), device=device, dtype=th.float32)
     m[:, y0:y1, x0:x1] = 1.0
     return m
 
 
 def pad_xyxy(x0, y0, x1, y1, H, W, pad_ratio):
+    """Grow a box by pad_ratio of its width and height on each side, clamped to the image."""
     bw, bh = x1 - x0, y1 - y0
     px, py = int(round(bw * pad_ratio)), int(round(bh * pad_ratio))
     return max(0, x0 - px), max(0, y0 - py), min(W, x1 + px), min(H, y1 + py)
@@ -114,6 +120,9 @@ def pad_xyxy(x0, y0, x1, y1, H, W, pad_ratio):
 
 # ----------------------------------------------------------------------------- four-channel generator wrapper
 def inflate_first_conv_to_4ch(unet):
+    """Widen the first U-Net convolution to four input channels so that the trained 4-channel weights can be loaded; the
+    extra channel starts at zero and is overwritten by the checkpoint.
+    """
     conv = unet.input_blocks[0][0]
     if conv.in_channels == 4:
         return
@@ -149,6 +158,8 @@ class BB4ChWrapper(nn.Module):
 
 
 def load_weights(model, path):
+    """Load an EMA or model checkpoint into the model, adding or removing the 'unet.' prefix of the wrapper as needed.
+    """
     sd = dist_util.load_state_dict(path, map_location="cpu")
     tgt_prefixed = next(iter(model.state_dict().keys())).startswith("unet.")
     src_prefixed = next(iter(sd.keys())).startswith("unet.")
@@ -202,6 +213,7 @@ class MainDWithMaskAdapter(nn.Module):
 
 
 def load_main_d(path, ndf, n_layers, use_mask_adapter, device):
+    """Load a saved main discriminator for the optional guidance, frozen and in eval mode."""
     d = MainDWithMaskAdapter(SpectralNLayerDiscriminator(3, ndf, n_layers, False), use_mask=use_mask_adapter)
     sd = th.load(path, map_location="cpu")
     missing, unexpected = d.load_state_dict(sd, strict=False)
@@ -251,6 +263,7 @@ def crop_resize_square_roi(x, bbs, roi_size, pad_ratio):
 
 
 def load_small_d(path, device):
+    """Load a saved small discriminator for the optional guidance, frozen and in eval mode."""
     d = SmallROIPatchD(3, 64)
     sd = th.load(path, map_location="cpu")
     d.load_state_dict(sd, strict=True)
@@ -298,6 +311,9 @@ def guidance_step(x0_pred, roi, roi_grad, D_main, D_small, boxes, *, w_main, w_s
 
 
 def mask_gain_at(i, T, mode, gain, gain_start, gain_end, power, band_lo, band_hi):
+    """Gain applied to the mask channel at step i: constant ('always'), zero ('off'), only inside the band ('band') or a
+    power ramp from gain_start to gain_end ('ramp'). Our sets use 'always'.
+    """
     if mode == "off":
         return 0.0
     if mode == "always":
@@ -314,6 +330,13 @@ def mask_gain_at(i, T, mode, gain, gain_start, gain_end, power, band_lo, band_hi
 @th.no_grad()
 def sample_batch(diffusion, model, shape, device, a, *, roi, roi_grad, use_ddim, bump_lo, bump_hi, guide_lo, guide_hi, cfg_lo, cfg_hi,
                  D, D_small, boxes, color_lo=-1, color_hi=-1, color_target=None):
+    """The reverse chain for one batch: ancestral sampling with the fixed posterior variance or ADM's learned variance,
+    or DDIM. At in-band steps with roi_bump_mode 'predict' the network predicts from a box-perturbed copy of the state
+    and the chain continues from the unperturbed one, as in training. Optional in the same loop: classifier-free
+    guidance on the mask channel in clean-image space (with the rescaling against over-saturation), colour guidance
+    towards a target colour, and gradient guidance from the saved discriminators. Returns the batch in [-1, 1] and the
+    guidance statistics.
+    """
     B = shape[0]
     x = th.randn(shape, device=device)
     T = diffusion.num_timesteps
@@ -398,6 +421,7 @@ def sample_batch(diffusion, model, shape, device, a, *, roi, roi_grad, use_ddim,
 
 
 def rev_to_idx(tmin_rev, tmax_rev, T_train, T):
+    """Map a window given in reverse-time units of the training horizon onto step indices of the respaced chain."""
     fwd_min = (T_train - 1) - int(tmax_rev)
     fwd_max = (T_train - 1) - int(tmin_rev)
     scale = T / float(T_train)
@@ -408,6 +432,9 @@ def rev_to_idx(tmin_rev, tmax_rev, T_train, T):
 
 # ----------------------------------------------------------------------------- main
 def main():
+    """Build the model, load the weights, read the boxes, and write num_samples images (sample_000000.png onwards, boxes
+    cycled in sorted order) plus meta.json with every box, the arguments and the measured cost.
+    """
     a = create_argparser().parse_args()
     th.manual_seed(a.seed); np.random.seed(a.seed)
     dist_util.setup_dist()
@@ -553,6 +580,7 @@ def main():
 
 
 def create_argparser():
+    """Every sampler setting with its default; the comments next to the defaults say what each option does."""
     defaults = dict(
         model_path="", bb_dir="", out_dir="",
         num_samples=3000, batch_size=16, start_index=0, seed=17,
