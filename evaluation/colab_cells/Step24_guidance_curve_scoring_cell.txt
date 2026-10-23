@@ -1,0 +1,132 @@
+# ==== GUIDANCE-TOLERANCE CURVE: FD, KD and failure rate against the guidance scale, every point at 1,000 images ==========
+# Works unchanged in the Cityscapes, Traffic and COCO Step14 notebooks (the dataset is read from XLSX). Three models: FDGAN,
+# ADM* (mask-conditioned ADM) and FDGAN without box noise, guidance 1.0 .. 3.5, final sampler (ancestral 500, learned variance,
+# colour guidance). Sources: the *_n1000_*_curve_cfgXX.zip files in CURVE_DIR (= Drive folder Sets_curve_n1000 next to Sets_200k)
+# plus the existing 3,000-image sets of the same chain in SETS_DIR (…anc500_nocfg = 1.0, …anc500_cfg15, …anc500_cfg20), of which
+# only the FIRST 1,000 images are used, so that every point has the same sample size (FD grows as the sample shrinks, so the
+# 3,000-image values of the main sheet must never be mixed into this curve). Real side as in the main sheet. Writes
+# <Dataset>_guidance_curve_n1000.xlsx and .png into RESULTS_DIR; points already in the xlsx are skipped, so the cell can be
+# re-run when more zips arrive. Run after the CONFIG cell, same session. ~3 min per point.
+N_CURVE = 1000
+# ==========================================================================================================================
+import os, re, glob, json, shutil, zipfile, subprocess, time
+import numpy as np, pandas as pd
+from PIL import Image
+assert all(n in globals() for n in ("REAL_DIR", "TEST_DIR", "SETS_DIR", "RESULTS_DIR", "XLSX", "ENV", "parse", "image_stats")), \
+    "run the cells above (including CONFIG) first"
+DATASET = os.path.basename(XLSX).split("_200k")[0]                      # Cityscapes | Traffic | COCO
+PREFIX, SUFFIX = {"Cityscapes": ("cityscapes_", ""), "Traffic": ("traffic2_", ""), "COCO": ("coco_", "_lsun")}[DATASET]
+CURVE_DIR = os.path.join(os.path.dirname(os.path.normpath(SETS_DIR)), "Sets_curve_n1000")
+OUT_XLSX = f"{RESULTS_DIR}/{DATASET}_guidance_curve_n1000.xlsx"
+OUT_PNG  = f"{RESULTS_DIR}/{DATASET}_guidance_curve_n1000.png"
+MODELS = {"fdgan_mask": "FDGAN", "adm_mask": "ADM* (mask-conditioned ADM)", "fdgan_nonoise": "FDGAN without box noise"}
+PAT = re.compile(r"^" + PREFIX + r"(fdgan_mask|adm_mask|fdgan_nonoise)" + SUFFIX +
+                 r"_ema200000_n(3000|1000)_r500_colsample_(?:anc500_|curve_)(nocfg|cfg(\d\d))$")
+print(f"dataset {DATASET} | curve zips from {CURVE_DIR} | 3,000-image sets from {SETS_DIR}")
+
+# ---- 1. collect the sources: (model, cfg) -> zip; a curve zip wins over a 3,000-image set of the same point -------------
+sources = {}
+for folder in (SETS_DIR, CURVE_DIR):
+    for zp in sorted(glob.glob(f"{folder}/*.zip")):
+        tag = os.path.basename(zp)[:-4]
+        m = PAT.match(tag)
+        if not m:
+            continue
+        model, n, lab, dd = m.group(1), int(m.group(2)), m.group(3), m.group(4)
+        cfg = 1.0 if lab == "nocfg" else int(dd) / 10.0
+        if (model, cfg) in sources and n == 3000:
+            continue
+        sources[(model, cfg)] = (zp, n)
+print(f"{len(sources)} curve points found:")
+for (model, cfg), (zp, n) in sorted(sources.items()):
+    print(f"   {MODELS[model]:<34} CFG {cfg:.1f}   {os.path.basename(zp)}  ({n} images in zip)")
+missing = [(MODELS[mo], c) for mo in MODELS for c in (1.0, 1.5, 2.0, 2.5, 3.0, 3.5) if (mo, c) not in sources]
+if missing:
+    print("not sampled yet (the figure will have a gap there):", missing)
+
+# ---- 2. score each point on its first N_CURVE images --------------------------------------------------------------------
+done = pd.read_excel(OUT_XLSX, index_col=0) if os.path.exists(OUT_XLSX) else pd.DataFrame()
+done_src = set(done["source"].astype(str)) if "source" in done.columns else set()
+
+def stage_first(zp, n_keep):
+    tag = os.path.basename(zp)[:-4]
+    raw, gen = f"/content/dgm-eval/_raw_{tag}", f"/content/dgm-eval/gen_curve_{tag}"
+    shutil.rmtree(raw, ignore_errors=True); shutil.rmtree(gen, ignore_errors=True); os.makedirs(gen)
+    with zipfile.ZipFile(zp) as z:
+        z.extractall(raw)
+    meta, pngs = {}, []
+    for dp, dn, fn in os.walk(raw):
+        for f in fn:
+            if f == "meta.json":
+                meta = json.load(open(os.path.join(dp, f)))
+            elif f.startswith("sample_") and f.lower().endswith(".png"):
+                pngs.append(os.path.join(dp, f))
+    for p in sorted(pngs, key=os.path.basename)[:n_keep]:
+        shutil.copy2(p, os.path.join(gen, os.path.basename(p)))
+    shutil.rmtree(raw)
+    bad = 0
+    for f in sorted(os.listdir(gen)):
+        try:
+            with Image.open(os.path.join(gen, f)) as im:
+                im.verify()
+        except Exception:
+            os.remove(os.path.join(gen, f)); bad += 1
+    return gen, meta, bad
+
+def dgm(model, metrics, gen, tag):
+    txt = f"{RESULTS_DIR}/{tag}_curve_n{N_CURVE}_{model}.txt"
+    cmd = ["python", "-m", "dgm_eval", REAL_DIR, gen, "--test_path", TEST_DIR, "--model", model, "--metrics", *metrics.split(),
+           "--device", "cuda", "--batch_size", "128", "--nsample", "3000", "--seed", "42",
+           "--output_dir", f"/content/dgm-eval/experiments_{DATASET.lower()}_curve"]
+    with open(txt, "w") as f:
+        p = subprocess.run(cmd, cwd="/content/dgm-eval", env=ENV, stdout=f, stderr=subprocess.STDOUT)
+    res = parse(txt)
+    if p.returncode != 0 or "fd" not in res:
+        print(open(txt).read()[-3000:]); raise RuntimeError(f"dgm-eval failed for {tag} / {model}: see {txt}")
+    return res
+
+for (model, cfg), (zp, n) in sorted(sources.items()):
+    tag = os.path.basename(zp)[:-4]
+    if tag in done_src:
+        print("skip (done):", tag); continue
+    t0 = time.time(); print(f"\n===== {MODELS[model]}  CFG {cfg:.1f}  <- {tag}")
+    gen, meta, bad = stage_first(zp, N_CURVE)
+    stats = image_stats(gen)
+    print(f"staged {stats['n_images']} images ({bad} corrupt removed) | saturation {stats['saturation']:.1f} contrast {stats['contrast']:.1f} "
+          f"failure rate {stats['failure_rate_pct']:.2f}%")
+    A = dgm("dinov2", "fd kd prdc", gen, tag)
+    B = dgm("inception", "fd", gen, tag)
+    row = {"model": MODELS[model], "model_key": model, "cfg": cfg, "source": tag, "n_images": stats["n_images"],
+           "dinov2_fd": A.get("fd"), "dinov2_kd_value": A.get("kd_value"), "dinov2_precision": A.get("precision"), "dinov2_recall": A.get("recall"),
+           "inception_fd": B.get("fd"), "failure_rate_pct": stats["failure_rate_pct"], "grain_median": stats["grain_median"],
+           "saturation": stats["saturation"], "contrast": stats["contrast"], "brightness": stats["brightness"],
+           "unet_evals_per_image": meta.get("cost", {}).get("unet_evals_per_image"), "mask_cfg_scale_meta": meta.get("args", {}).get("mask_cfg_scale")}
+    done = pd.concat([done, pd.DataFrame([row], index=[f"{model}_cfg{cfg:.1f}"])])
+    done.index.name = "point"; done.to_excel(OUT_XLSX)
+    print(f"DINOv2 FD {A['fd']:.1f} | KD {A.get('kd_value', float('nan')):.3f} | FID {B['fd']:.2f} | P {A.get('precision', float('nan')):.3f} "
+          f"R {A.get('recall', float('nan')):.3f} | {time.time() - t0:.0f} s -> saved")
+    shutil.rmtree(gen, ignore_errors=True)
+
+# ---- 3. table and figure ---------------------------------------------------------------------------------------------------
+tab = pd.read_excel(OUT_XLSX, index_col=0).sort_values(["model_key", "cfg"])
+pd.set_option("display.width", 220)
+print("\n" + tab[["model", "cfg", "n_images", "dinov2_fd", "dinov2_kd_value", "inception_fd", "dinov2_precision", "dinov2_recall",
+                   "failure_rate_pct", "saturation", "contrast"]].round(3).to_string(index=False))
+if DATASET == "COCO":
+    print("note: the failure-rate threshold (Laplacian variance > 2000) is not valid on COCO (25.6 % of REAL potted-plant images exceed it); "
+          "read grain_median against the real value 1,339 instead")
+import matplotlib.pyplot as plt
+fig, ax = plt.subplots(1, 3, figsize=(14, 4))
+for key, name in MODELS.items():
+    t = tab[tab["model_key"] == key].sort_values("cfg")
+    if len(t) == 0:
+        continue
+    ax[0].plot(t["cfg"], t["dinov2_fd"], marker="o", label=name)
+    ax[1].plot(t["cfg"], t["dinov2_kd_value"], marker="o", label=name)
+    ax[2].plot(t["cfg"], t["failure_rate_pct"], marker="o", label=name)
+for a, yl in zip(ax, ["DINOv2 FD (1,000 images)", "DINOv2 KD", "failure rate (%)"]):
+    a.set_xlabel("mask guidance scale"); a.set_ylabel(yl); a.grid(alpha=0.3)
+ax[0].legend(fontsize=8)
+fig.suptitle(f"{DATASET}, final sampler: tolerance to guidance strength")
+fig.tight_layout(); fig.savefig(OUT_PNG, dpi=150); plt.show()
+print("saved", OUT_XLSX, "and", OUT_PNG)

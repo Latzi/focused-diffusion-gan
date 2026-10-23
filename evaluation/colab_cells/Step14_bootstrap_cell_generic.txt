@@ -1,0 +1,110 @@
+# ==== SAMPLING UNCERTAINTY (AE point 8): paired bootstrap of the DINOv2 FD for the final-recipe rows =======================
+# Rows are taken from this notebook's sheet automatically: every row sampled with the final recipe (anc500 / anc_cfg175) plus the
+# ADM anc_lv row; when LSUN-initialised rows exist (COCO) only those are used. A = the FDGAN recipe row (…anc500_cfg15).
+# For each row, dgm-eval is run once more with --save so that its DINOv2 features (and the real set's) are stored; then B
+# bootstrap replicates: one resample of the real features shared by all models (pairs the comparisons) and one resample of
+# each generated set; FD per replicate with dgm-eval's own FD function. Bootstrap FD values are biased upward compared with the
+# point estimate (resampling with replacement repeats images), so only spreads, intervals and paired differences are
+# reported, never the bootstrap mean as a new FD.  Run after the CONFIG cell, same session.  ~3-4 min per row + ~1 s per replicate.
+# 21 Oct 2026 fix: the cached feature file of a row is matched by its exact name (reps_<name>_dinov2_...), no longer by
+# "name contains", which confused ...anc500_cfg15 with ...anc500_cfg15_win once both were in the cache.
+B, SEED = 200, 0
+# =========================================================================================================================
+import os, glob, shutil, zipfile, subprocess, time
+import numpy as np, pandas as pd
+from dgm_eval.metrics.fd import compute_efficient_FD_with_reps
+assert all(n in globals() for n in ("REAL_DIR", "SETS_DIR", "RESULTS_DIR", "XLSX", "ENV", "NSAMPLE")), "run the cells above (incl. CONFIG) first"
+WHOLE_XLSX = XLSX
+sheet = pd.read_excel(WHOLE_XLSX, index_col=0)
+sheet.index = sheet.index.astype(str)
+ROWS = [t for t in sheet.index if ("_anc500" in t or "anc_cfg175" in t or "anc_lv" in t)]
+if any("_lsun_" in t for t in ROWS):
+    ROWS = [t for t in ROWS if "_lsun_" in t]
+cands = [t for t in ROWS if "fdgan_mask_" in t and "smallD" not in t and "rep2" not in t and t.endswith("anc500_cfg15")]
+assert cands, "no FDGAN recipe row (...anc500_cfg15) in the sheet yet"
+A = cands[0]
+PAIRS = [(A, r) for r in ROWS if r != A]
+DATASET = os.path.basename(XLSX).split("_200k")[0]
+print("rows:", ROWS, "\nreference row A:", A)
+CACHE = "/content/dgm-eval/reps_cache"
+os.makedirs(CACHE, exist_ok=True)
+REAL_NAME = os.path.basename(os.path.normpath(REAL_DIR))
+
+def stage(tag):
+    zp = f"{SETS_DIR}/{tag}.zip"
+    assert os.path.exists(zp), f"zip not found: {zp}"
+    raw, gen = f"/content/dgm-eval/_raw_{tag}", f"/content/dgm-eval/gen_{tag}"
+    shutil.rmtree(raw, ignore_errors=True); shutil.rmtree(gen, ignore_errors=True); os.makedirs(gen)
+    with zipfile.ZipFile(zp) as z:
+        z.extractall(raw)
+    for dp, dn, fn in os.walk(raw):
+        for f in fn:
+            if f.startswith("sample_") and f.lower().endswith(".png"):
+                shutil.copy2(os.path.join(dp, f), os.path.join(gen, f))
+    shutil.rmtree(raw)
+    return gen
+
+def find_reps(name_part):
+    hits = [f for f in glob.glob(f"{CACHE}/reps_*.npz") if os.path.basename(f).startswith(f"reps_{name_part}_dinov2_")]
+    return hits[0] if len(hits) == 1 else None
+
+def features(tag):
+    if find_reps(f"gen_{tag}") is None or find_reps(REAL_NAME) is None:
+        gen = stage(tag)
+        cmd = ["python", "-m", "dgm_eval", REAL_DIR, gen, "--model", "dinov2", "--metrics", "fd", "--device", "cuda", "--batch_size", "128",
+               "--nsample", str(NSAMPLE), "--seed", "42", "--save", "--output_dir", CACHE]
+        with open(f"{RESULTS_DIR}/{tag}_dinov2_features_for_bootstrap.txt", "w") as f:
+            p = subprocess.run(cmd, cwd="/content/dgm-eval", env=ENV, stdout=f, stderr=subprocess.STDOUT)
+        shutil.rmtree(gen, ignore_errors=True)
+        if p.returncode != 0 or find_reps(f"gen_{tag}") is None:
+            print(open(f"{RESULTS_DIR}/{tag}_dinov2_features_for_bootstrap.txt").read()[-2000:])
+            print("files in cache:", sorted(os.listdir(CACHE)))
+            raise RuntimeError(f"feature extraction failed for {tag}")
+    real = np.load(find_reps(REAL_NAME), allow_pickle=True)["reps"].astype(np.float64)
+    gen = np.load(find_reps(f"gen_{tag}"), allow_pickle=True)["reps"].astype(np.float64)
+    return real, gen
+
+t0 = time.time()
+feats = {}
+for tag in ROWS:
+    real, feats[tag] = features(tag)
+    print(f"features ready: {tag}  gen {feats[tag].shape}  real {real.shape}  ({time.time() - t0:.0f} s)")
+
+rng = np.random.default_rng(SEED)
+n_real = len(real)
+boot = {tag: np.zeros(B) for tag in ROWS}
+for b in range(B):
+    ir = rng.integers(0, n_real, n_real)
+    rb = real[ir]
+    for tag in ROWS:
+        g = feats[tag]
+        boot[tag][b] = compute_efficient_FD_with_reps(rb, g[rng.integers(0, len(g), len(g))])
+    if (b + 1) % 25 == 0:
+        print(f"bootstrap {b + 1}/{B}  ({time.time() - t0:.0f} s)")
+
+try:
+    point = pd.read_excel(WHOLE_XLSX, index_col=0)["dinov2_fd"].astype(float)
+except Exception as e:
+    print("point FD not available:", e)
+    point = pd.Series(dtype=float)
+per_model = pd.DataFrame({
+    "fd_point": [point.get(t, np.nan) for t in ROWS],
+    "boot_mean": [boot[t].mean() for t in ROWS],
+    "boot_std": [boot[t].std(ddof=1) for t in ROWS],
+    "ci95_low": [np.percentile(boot[t], 2.5) for t in ROWS],
+    "ci95_high": [np.percentile(boot[t], 97.5) for t in ROWS],
+    "n_gen": [len(feats[t]) for t in ROWS], "n_real": n_real, "B": B}, index=ROWS)
+pairs = pd.DataFrame([{
+    "A": a, "B": b2, "diff_point": point.get(a, np.nan) - point.get(b2, np.nan),
+    "diff_boot_mean": (boot[a] - boot[b2]).mean(), "diff_ci95_low": np.percentile(boot[a] - boot[b2], 2.5),
+    "diff_ci95_high": np.percentile(boot[a] - boot[b2], 97.5), "P(A better)": float((boot[a] < boot[b2]).mean())} for a, b2 in PAIRS])
+pd.DataFrame(boot).to_csv(f"{RESULTS_DIR}/{DATASET}_bootstrap_replicates.csv", index_label="replicate")   # raw FD per replicate and row: any pair can be compared later
+out = f"{RESULTS_DIR}/{DATASET}_bootstrap_FD.xlsx"
+with pd.ExcelWriter(out) as w:
+    per_model.to_excel(w, sheet_name="per_model"); pairs.to_excel(w, sheet_name="pairs", index=False)
+pd.set_option("display.width", 220)
+print("\nper model (fd_point = sheet value; boot_* describe the spread, not a new FD):")
+print(per_model.round(2).to_string())
+print("\npaired differences A - B (negative = A better); P(A better) = share of replicates with FD_A < FD_B:")
+print(pairs.round(3).to_string(index=False))
+print(f"\nsaved {out}  ({time.time() - t0:.0f} s)")

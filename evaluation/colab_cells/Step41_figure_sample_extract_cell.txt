@@ -1,0 +1,82 @@
+# ==== EXTRACT THE SAMPLES FOR THE FIGURES (Figure 3, S7 grids, ablation grid) INTO ONE SMALL ZIP ===========================
+# Run in any Colab session after mounting Drive (no GPU needed; about 2-4 minutes). For every sample set listed below it
+# copies the first K samples by index (sample index i = box i in sorted order, identical for every set, so the rows of the
+# figures are box-matched across models), their meta.json records (bb_stem, bb_xyxy) and the real image each box came from.
+# Output: /content/gdrive/MyDrive/PhD/figure_samples_23Oct.zip  (a few tens of MB). Download it and send it to Claude.
+K = 12                                                            # samples per set (indices 0..K-1)
+OUT_ZIP = "/content/gdrive/MyDrive/PhD/figure_samples_23Oct.zip"
+# dataset -> (Sets_200k folder, real-image zip, [substring patterns of the sets wanted; a pattern must match exactly one zip])
+PLAN = {
+  "Cityscapes": ("/content/gdrive/MyDrive/PhD/Cityscapes/Sets_200k", "/content/gdrive/MyDrive/PhD/Cityscapes/Cityscapes_3009_img.zip", [
+      "cityscapes_adm_ema200000_n3000_r250_colsample_anc_lv",            # ADM, Table 1 (250 steps)
+      "cityscapes_adm_ema200000_n3000_r500_colsample_anc500_lv",         # ADM, 500 steps
+      "cityscapes_adm_mask_ema200000_n3000_r500_colsample_anc500_cfg20", # FDGAN*, guidance 2.0
+      "cityscapes_fdgan_mask_ema200000_n3000_r500_colsample_anc500_cfg20",  # FDGAN, guidance 2.0
+      "cityscapes_adm_mask_ema200000_n3000_r500_colsample_anc500_cfg15", # FDGAN*, 1.5
+      "cityscapes_fdgan_mask_ema200000_n3000_r500_colsample_anc500_cfg15",  # FDGAN, 1.5
+      "cityscapes_adm_mask_ema200000_n3000_r500_colsample_anc500_nocfg", # FDGAN*, no guidance
+      "cityscapes_fdgan_mask_ema200000_n3000_r500_colsample_anc500_nocfg",  # FDGAN, no guidance
+      "cityscapes_fdgan_nomask_ema200000_n3000_r500_colsample_anc500",   # no box mask
+      "cityscapes_fdgan_nonoise_ema200000_n3000_r500_colsample_anc500_cfg20",     # no localized noise
+      "cityscapes_fdgan_globalnoise_ema200000_n3000_r500_colsample_anc500_cfg20", # global noise
+      "cityscapes_fdgan_mask_smallD_ema200000_n3000_r500_colsample_anc500_cfg20", # small ROI discriminator
+      "cityscapes_adm_mask_rep2_ema200000_n3000_r500_colsample_anc500_cfg20",     # FDGAN*, seed 2
+      "cityscapes_fdgan_mask_rep2_ema200000_n3000_r500_colsample_anc500_cfg20",   # FDGAN, seed 2
+  ]),
+  "Traffic": ("/content/gdrive/MyDrive/PhD/TrafficSigns/Sets_200k", "/content/gdrive/MyDrive/PhD/TrafficSigns/TrafficSigns_img.zip", [
+      "traffic_adm_ema200000_n3000_r250_colsample_anc_lv",
+      "traffic2_adm_mask_ema200000_n3000_r500_colsample_anc500_cfg20",
+      "traffic2_fdgan_mask_ema200000_n3000_r500_colsample_anc500_cfg20",
+  ]),
+  "COCO": ("/content/gdrive/MyDrive/PhD/COCO/Sets_200k", "/content/gdrive/MyDrive/PhD/COCO/COCO_PottedPlant_256sq_Img.zip", [
+      "coco_adm_lsun_ema200000_n3000_r250_colsample_anc_lv",
+      "coco_adm_mask_lsun_ema200000_n3000_r500_colsample_anc500_cfg20",
+      "coco_fdgan_mask_lsun_ema200000_n3000_r500_colsample_anc500_cfg20",
+  ]),
+}
+# ==========================================================================================================================
+import os, io, json, zipfile
+if not os.path.exists("/content/gdrive/MyDrive"):
+    from google.colab import drive
+    drive.mount("/content/gdrive")
+index = []          # one record per extracted sample
+problems = []
+out = zipfile.ZipFile(OUT_ZIP, "w", zipfile.ZIP_DEFLATED)
+for ds, (sets_dir, real_zip, patterns) in PLAN.items():
+    zips = sorted(f for f in os.listdir(sets_dir) if f.endswith(".zip"))
+    # real images: index by file stem (the zip may hold a folder; only the basename matters, as in the Step16 notebooks)
+    rz = zipfile.ZipFile(real_zip)
+    real_members = {os.path.splitext(os.path.basename(n))[0]: n for n in rz.namelist() if n.lower().endswith((".png", ".jpg", ".jpeg"))}
+    needed_real = {}
+    for pat in patterns:
+        hits = [f for f in zips if pat in f]
+        if len(hits) != 1:
+            problems.append(f"{ds}: pattern {pat!r} matches {len(hits)} zips: {hits}"); continue
+        zname = hits[0]; setname = zname[:-4]
+        with zipfile.ZipFile(os.path.join(sets_dir, zname)) as z:
+            names = z.namelist()
+            meta_name = next((n for n in names if os.path.basename(n) == "meta.json"), None)
+            if meta_name is None:
+                problems.append(f"{ds}: no meta.json in {zname}"); continue
+            meta = json.loads(z.read(meta_name))
+            recs = meta["samples"][:K]
+            by_base = {os.path.basename(n): n for n in names}
+            for i, s in enumerate(recs):
+                member = by_base.get(s["file"])
+                if member is None:
+                    problems.append(f"{ds}/{setname}: {s['file']} missing in zip"); continue
+                arc = f"{ds}/{setname}/{s['file']}"
+                out.writestr(arc, z.read(member))
+                index.append({"dataset": ds, "set": setname, "index": i, "file": arc, "bb_stem": s["bb_stem"], "bb_xyxy": s["bb_xyxy"]})
+                needed_real[s["bb_stem"]] = s["bb_xyxy"]
+    for stem in sorted(needed_real):
+        m = real_members.get(stem)
+        if m is None:
+            problems.append(f"{ds}: real image for stem {stem!r} not in {os.path.basename(real_zip)}"); continue
+        out.writestr(f"{ds}/real/{os.path.basename(m)}", rz.read(m))
+    rz.close()
+    print(f"{ds}: {len([r for r in index if r['dataset'] == ds])} samples from {len([p for p in patterns])} sets, {len(needed_real)} real images")
+out.writestr("index.json", json.dumps(index, indent=1))
+out.close()
+print(f"\nwritten: {OUT_ZIP}  ({os.path.getsize(OUT_ZIP) // (1024 * 1024)} MB, {len(index)} samples)")
+print("problems:" if problems else "no problems"); [print("   ", p) for p in problems]

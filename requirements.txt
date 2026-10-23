@@ -1,0 +1,14 @@
+# Packages imported by the code in this repository. The exact versions of the cluster environment that produced the
+# runs are listed in environment_cluster.txt (added with the cluster copy of the code).
+torch
+torchvision
+numpy
+Pillow
+blobfile
+mpi4py
+# evaluation notebooks and audit scripts
+pandas
+openpyxl
+# dgm-eval is installed from source in the notebooks: https://github.com/layer6ai-labs/dgm-eval
+# downstream detector study
+ultralytics

@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+message: "If you use this code or the evaluation record, please cite the paper below."
+title: "Focused Diffusion-GAN (FDGAN): code and evaluation record"
+type: software
+authors:
+  - family-names: "Marian"
+    given-names: "Vasile"
+    affiliation: "The University of Queensland"
+  - family-names: "Kang"
+    given-names: "Yong-Bin"
+    orcid: "https://orcid.org/0000-0002-0120-2582"
+    affiliation: "Swinburne University of Technology"
+  - family-names: "Buddery"
+    given-names: "Alexander"
+    affiliation: "The University of Queensland"
+repository-code: "https://github.com/Latzi/focused-diffusion-gan"
+license: MIT
+version: "0.1.0"
+date-released: 2026-10-23
+preferred-citation:
+  type: article
+  title: "Focused Diffusion-GAN: Object-Centric Image Generation Using Integrated GAN and Diffusion Frameworks"
+  authors:
+    - family-names: "Marian"
+      given-names: "Vasile"
+    - family-names: "Kang"
+      given-names: "Yong-Bin"
+    - family-names: "Buddery"
+      given-names: "Alexander"
+  journal: "Image and Vision Computing"
+  year: 2026
+  status: submitted
+  notes: "Manuscript IMAVIS-D-26-03725, under revision."

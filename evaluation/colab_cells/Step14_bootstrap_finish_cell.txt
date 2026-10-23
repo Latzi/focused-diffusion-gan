@@ -1,0 +1,33 @@
+# ==== BOOTSTRAP: FINISH (uses the replicates already in memory: boot, feats, real, ROWS, PAIRS, B) =========================
+# Paste and run this in the same Colab session right after the bootstrap cell that stopped with KeyError: 'dinov2_fd'.
+# It reads the point FD values from the Step14 whole-image sheet by its full path and writes the two result tables.
+import os
+import numpy as np, pandas as pd
+WHOLE_XLSX = "/content/gdrive/MyDrive/PhD/Cityscapes/Sets_200k_metrics/Cityscapes_200k_metrics.xlsx"
+try:
+    point = pd.read_excel(WHOLE_XLSX, index_col=0)["dinov2_fd"].astype(float)
+except Exception as e:
+    print("point FD not available:", e)
+    point = pd.Series(dtype=float)
+n_real = len(real)
+per_model = pd.DataFrame({
+    "fd_point": [point.get(t, np.nan) for t in ROWS],
+    "boot_mean": [boot[t].mean() for t in ROWS],
+    "boot_std": [boot[t].std(ddof=1) for t in ROWS],
+    "ci95_low": [np.percentile(boot[t], 2.5) for t in ROWS],
+    "ci95_high": [np.percentile(boot[t], 97.5) for t in ROWS],
+    "n_gen": [len(feats[t]) for t in ROWS], "n_real": n_real, "B": B}, index=ROWS)
+pairs = pd.DataFrame([{
+    "A": a, "B": b2, "diff_point": point.get(a, np.nan) - point.get(b2, np.nan),
+    "diff_boot_mean": (boot[a] - boot[b2]).mean(), "diff_ci95_low": np.percentile(boot[a] - boot[b2], 2.5),
+    "diff_ci95_high": np.percentile(boot[a] - boot[b2], 97.5), "P(A better)": float((boot[a] < boot[b2]).mean())} for a, b2 in PAIRS])
+out = f"{RESULTS_DIR}/Cityscapes_bootstrap_FD.xlsx"
+with pd.ExcelWriter(out) as w:
+    per_model.to_excel(w, sheet_name="per_model")
+    pairs.to_excel(w, sheet_name="pairs", index=False)
+pd.set_option("display.width", 220)
+print("per model (fd_point = sheet value; boot_* describe the spread, not a new FD):")
+print(per_model.round(2).to_string())
+print("\npaired differences A - B (negative = A better); P(A better) = share of replicates with FD_A < FD_B:")
+print(pairs.round(3).to_string(index=False))
+print(f"\nsaved {out}")

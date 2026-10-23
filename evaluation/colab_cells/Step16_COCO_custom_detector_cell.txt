@@ -1,0 +1,74 @@
+# ==== COCO POTTED PLANT: re-run the placement test with the potted-plant YOLO model trained on real COCO images ==============
+# The COCO-pretrained YOLO11n (class 58) finds the plant in only 48 % of the real crops; this cell replaces the detector columns of
+# COCO_object_metrics.xlsx with the detector trained on the real COCO potted-plant images. A detection of ANY class overlapping the conditioned box with
+# IoU >= 0.5 counts as "plant in box". The crop FD / KD columns are untouched. Run after the CONFIG cell, same session; it
+# re-stages each set from its zip (no crops, no dgm-eval), so it takes only a few minutes per set.
+WEIGHTS = "/content/gdrive/MyDrive/PhD/COCO/BaselinePretrainedModel/best.pt"
+CONF, IOU_THR, IMGSZ = 0.25, 0.5, 256
+# ==========================================================================================================================
+import os, json, shutil, zipfile, glob, time
+import numpy as np, pandas as pd
+from ultralytics import YOLO
+assert all(n in globals() for n in ("SETS_DIR", "RESULTS_DIR", "XLSX", "REAL_INDEX")), "run the cells above (incl. CONFIG) first"
+assert os.path.exists(WEIGHTS), f"weights not found: {WEIGHTS}"
+det = YOLO(WEIGHTS)
+print("detector classes:", det.names)
+
+def iou_xyxy(a, b):
+    ix1, iy1, ix2, iy2 = max(a[0], b[0]), max(a[1], b[1]), min(a[2], b[2]), min(a[3], b[3])
+    inter = max(0, ix2 - ix1) * max(0, iy2 - iy1)
+    ua = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter
+    return inter / ua if ua > 0 else 0.0
+
+def detect_any(paths, boxes, batch=32):
+    hit, best, found = [], [], []
+    for i in range(0, len(paths), batch):
+        res = det.predict(paths[i:i + batch], conf=CONF, verbose=False, imgsz=IMGSZ)   # all classes
+        for box, r in zip(boxes[i:i + batch], res):
+            d = r.boxes.xyxy.cpu().numpy().tolist() if r.boxes is not None and len(r.boxes) else []
+            b = max((iou_xyxy(box, x) for x in d), default=0.0)
+            found.append(len(d) > 0); hit.append(b >= IOU_THR); best.append(b)
+    return dict(target_detected_pct=100 * float(np.mean(found)), target_in_box_iou50_pct=100 * float(np.mean(hit)), mean_best_iou=float(np.mean(best)))
+
+table = pd.read_excel(XLSX, index_col=0)
+table.index = table.index.astype(str)
+real_ref = None
+for tag in table.index:
+    zp = f"{SETS_DIR}/{tag}.zip"
+    if not os.path.exists(zp):
+        print("zip missing, skipped:", tag); continue
+    t0 = time.time()
+    raw, gen = f"/content/dgm-eval/_raw_{tag}", f"/content/dgm-eval/gen_{tag}"
+    shutil.rmtree(raw, ignore_errors=True); shutil.rmtree(gen, ignore_errors=True); os.makedirs(gen)
+    with zipfile.ZipFile(zp) as z:
+        z.extractall(raw)
+    meta = None
+    for dp, dn, fn in os.walk(raw):
+        for f in fn:
+            if f == "meta.json":
+                meta = json.load(open(os.path.join(dp, f)))
+            elif f.startswith("sample_") and f.lower().endswith(".png"):
+                shutil.copy2(os.path.join(dp, f), os.path.join(gen, f))
+    shutil.rmtree(raw)
+    assert meta is not None, f"no meta.json in {zp}"
+    samples = [s for s in meta["samples"] if os.path.exists(os.path.join(gen, s["file"]))]
+    boxes = [s["bb_xyxy"] for s in samples]
+    g = detect_any([os.path.join(gen, s["file"]) for s in samples], boxes)
+    if real_ref is None:
+        rs = [s for s in samples if s["bb_stem"] in REAL_INDEX]
+        real_ref = detect_any([REAL_INDEX[s["bb_stem"]] for s in rs], [s["bb_xyxy"] for s in rs])
+        print("real-image reference with this detector:", {k: round(v, 3) for k, v in real_ref.items()})
+    for k, v in g.items():
+        table.loc[tag, "det_" + k] = v
+    for k, v in real_ref.items():
+        table.loc[tag, "real_det_" + k] = v
+    table.loc[tag, "detector"] = "PottedPlant YOLO (real COCO images only), any class"
+    table.index.name = "set"
+    table.to_excel(XLSX)
+    print(f"{tag}: plant found {g['target_detected_pct']:.1f}% | in box IoU>=0.5 {g['target_in_box_iou50_pct']:.1f}% | mean IoU {g['mean_best_iou']:.3f} "
+          f"({time.time() - t0:.0f} s) -> saved")
+    shutil.rmtree(gen, ignore_errors=True)
+pd.set_option("display.width", 220)
+cols = [c for c in ["crop_dinov2_fd", "crop_dinov2_kd_value", "det_target_detected_pct", "det_target_in_box_iou50_pct", "det_mean_best_iou",
+                    "real_det_target_in_box_iou50_pct"] if c in table.columns]
+print(table[cols].sort_values("crop_dinov2_fd").round(3).to_string())

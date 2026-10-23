@@ -1,0 +1,92 @@
+# ==== FILL IN THE C_T COLUMNS + AUDIT THE SHEET AGAINST THE RAW dgm-eval FILES ==============================
+# Run AFTER the CONFIG cell, in the same session (CONFIG only skips the sets already scored, so it is quick).
+#  1) Audit: every FD / FD-infinity / KD / precision / recall in the xlsx is compared with the raw
+#     <set>_dinov2.txt and <set>_inception.txt files that dgm-eval wrote; any cell that differs is listed.
+#  2) Fill: for rows whose dinov2_ct_modified is blank, dgm-eval is re-run for "ct ct_modified" only, trying
+#     several seeds (the k-means cells change with the seed, which is what makes dgm-eval's C_T code crash);
+#     the first seed that works is written into the sheet (both ct and ct_modified from that run, plus the seed).
+ROWS  = "final"          # "final" = rows sampled with the final recipe (anc500 / anc_cfg175); "all" = every row with a blank
+SEEDS = [42, 43, 44, 45, 46]
+# ==========================================================================================================
+import os, shutil, zipfile, subprocess, time
+import pandas as pd
+assert all(n in globals() for n in ("REAL_DIR", "TEST_DIR", "parse", "RESULTS_DIR", "XLSX", "SETS_DIR", "ENV", "NSAMPLE")), \
+    "run the cells above (including CONFIG) first"
+table = pd.read_excel(XLSX, index_col=0)
+table.index = table.index.astype(str)
+
+# ---- 1. audit --------------------------------------------------------------------------------------------
+checks = {"dinov2": ["fd", "fd_infinity_value", "kd_value", "precision", "recall"],
+          "inception": ["fd", "fd_infinity_value", "kd_value"]}
+n_ok = n_bad = n_missing = 0
+for tag in table.index:
+    for model, keys in checks.items():
+        txt = f"{RESULTS_DIR}/{tag}_{model}.txt"
+        if not os.path.exists(txt):
+            n_missing += 1
+            print(f"[audit] no raw file for {tag} / {model}")
+            continue
+        raw = parse(txt)
+        for k in keys:
+            col = f"{model}_{k}"
+            if k not in raw or col not in table.columns or pd.isna(table.loc[tag, col]):
+                continue
+            if abs(float(raw[k]) - float(table.loc[tag, col])) > 1e-4:
+                n_bad += 1
+                print(f"[audit] MISMATCH {tag} {col}: sheet {float(table.loc[tag, col]):.4f}   raw file {raw[k]:.4f}")
+            else:
+                n_ok += 1
+print(f"[audit] {n_ok} values match the raw files, {n_bad} differ, {n_missing} raw files missing")
+
+# ---- 2. fill C_T -----------------------------------------------------------------------------------------
+def stage(tag):
+    zp = f"{SETS_DIR}/{tag}.zip"
+    assert os.path.exists(zp), f"zip not found: {zp}"
+    raw = f"/content/dgm-eval/_raw_{tag}"
+    gen = f"/content/dgm-eval/gen_{tag}"
+    shutil.rmtree(raw, ignore_errors=True)
+    shutil.rmtree(gen, ignore_errors=True)
+    os.makedirs(gen)
+    with zipfile.ZipFile(zp) as z:
+        z.extractall(raw)
+    for dp, dn, fn in os.walk(raw):
+        for f in fn:
+            if f.startswith("sample_") and f.lower().endswith(".png"):
+                shutil.copy2(os.path.join(dp, f), os.path.join(gen, f))
+    shutil.rmtree(raw)
+    return gen
+
+def run_ct(gen, tag, seed):
+    txt = f"{RESULTS_DIR}/{tag}_dinov2_ct_seed{seed}.txt"
+    cmd = ["python", "-m", "dgm_eval", REAL_DIR, gen, "--test_path", TEST_DIR, "--model", "dinov2",
+           "--metrics", "ct", "ct_modified", "--device", "cuda", "--batch_size", "128", "--nsample", str(NSAMPLE),
+           "--seed", str(seed), "--output_dir", "/content/dgm-eval/experiments_cityscapes200k"]
+    with open(txt, "w") as f:
+        p = subprocess.run(cmd, cwd="/content/dgm-eval", env=ENV, stdout=f, stderr=subprocess.STDOUT)
+    res = parse(txt)
+    return res if (p.returncode == 0 and "ct" in res and "ct_modified" in res) else None
+
+todo = [t for t in table.index
+        if pd.isna(table.loc[t, "dinov2_ct_modified"]) and (ROWS == "all" or "_anc500" in t or "anc_cfg175" in t)]
+print(f"\n{len(todo)} rows to fill: {todo}")
+for tag in todo:
+    t0 = time.time()
+    gen = stage(tag)
+    got, used = None, None
+    for s in SEEDS:
+        got = run_ct(gen, tag, s)
+        if got:
+            used = s
+            break
+        print(f"   {tag}: C_T failed with seed {s}, trying the next seed")
+    if got:
+        table.loc[tag, "dinov2_ct"] = got["ct"]
+        table.loc[tag, "dinov2_ct_modified"] = got["ct_modified"]
+        table.loc[tag, "ct_seed"] = used
+        table.index.name = "set"
+        table.to_excel(XLSX)
+        print(f"{tag}: ct {got['ct']:.3f}  ct_modified {got['ct_modified']:.3f}  (seed {used}, {time.time() - t0:.0f} s) -> saved")
+    else:
+        print(f"{tag}: C_T could not be computed with any seed; left blank (report as '-')")
+    shutil.rmtree(gen, ignore_errors=True)
+print("\ndone")

@@ -1,0 +1,41 @@
+# ==== UNPACK A SAMPLE-SET BUNDLE FROM THE CLUSTER INTO THE THREE Sets_200k FOLDERS ON DRIVE ===============================
+# The bundle (e.g. transfer_21Oct_A.zip) holds the *_n3000_*.zip sample sets copied from samples_Step11. Each inner zip is
+# written, unchanged, into the Sets_200k folder of its dataset, chosen from the file-name prefix (cityscapes_ / traffic_,
+# traffic2_ / coco_). Existing files are never overwritten (a second run is a no-op). Run in any Colab session after mounting
+# Drive (Runtime does not matter; no GPU needed). Then run the Step14 loop cell of each notebook that received new sets.
+BUNDLE = "/content/gdrive/MyDrive/PhD/transfer_21Oct_A.zip"     # <-- where you uploaded the bundle on Drive
+# ==========================================================================================================================
+import os, zipfile
+ROUTE = {"cityscapes_": "/content/gdrive/MyDrive/PhD/Cityscapes/Sets_200k",
+         "traffic": "/content/gdrive/MyDrive/PhD/TrafficSigns/Sets_200k",     # traffic_ and traffic2_
+         "coco_": "/content/gdrive/MyDrive/PhD/COCO/Sets_200k"}
+if not os.path.exists("/content/gdrive/MyDrive"):
+    from google.colab import drive
+    drive.mount("/content/gdrive")
+assert os.path.exists(BUNDLE), f"bundle not found: {BUNDLE}"
+written, skipped, unknown = [], [], []
+with zipfile.ZipFile(BUNDLE) as z:
+    members = [m for m in z.namelist() if m.lower().endswith(".zip")]
+    assert members, "the bundle contains no .zip sample sets"
+    for m in members:
+        name = os.path.basename(m)
+        dest_dir = next((d for p, d in ROUTE.items() if name.startswith(p)), None)
+        if dest_dir is None:
+            unknown.append(name); continue
+        os.makedirs(dest_dir, exist_ok=True)
+        dest = os.path.join(dest_dir, name)
+        if os.path.exists(dest):
+            skipped.append(name); continue
+        with z.open(m) as src, open(dest + ".part", "wb") as out:
+            while True:
+                chunk = src.read(16 * 1024 * 1024)
+                if not chunk:
+                    break
+                out.write(chunk)
+        os.replace(dest + ".part", dest)
+        written.append((name, os.path.getsize(dest) // (1024 * 1024)))
+print("written:");  [print(f"   {n}  ({mb} MB)") for n, mb in written]
+print("already present, skipped:", skipped or "none")
+print("NOT routed (unknown prefix):", unknown or "none")
+for d in set(ROUTE.values()):
+    print(d, "->", len([f for f in os.listdir(d) if f.endswith(".zip")]) if os.path.isdir(d) else "missing", "zips")

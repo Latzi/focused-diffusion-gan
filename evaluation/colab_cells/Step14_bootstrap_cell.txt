@@ -1,0 +1,104 @@
+# ==== SAMPLING UNCERTAINTY (AE point 8): paired bootstrap of the DINOv2 FD for the final-recipe rows =======================
+# For each selected set, dgm-eval is run once more with --save so that its DINOv2 features (and the real set's) are stored.
+# Then B bootstrap replicates: one resample of the real features shared by all models (this pairs the comparisons) and one
+# resample of each generated set; FD per replicate with dgm-eval's own FD function. Bootstrap FD values are biased upward
+# compared with the point estimate (resampling with replacement repeats images), so only spreads, intervals and paired
+# differences are reported, never the bootstrap mean as a new FD.  Run after the CONFIG cell, same session.  ~30 min.
+ROWS = ["cityscapes_fdgan_mask_ema200000_n3000_r500_colsample_anc500_cfg15",
+        "cityscapes_adm_mask_ema200000_n3000_r500_colsample_anc500_cfg15",
+        "cityscapes_fdgan_nonoise_ema200000_n3000_r500_colsample_anc500_cfg15",
+        "cityscapes_fdgan_globalnoise_ema200000_n3000_r500_colsample_anc500_cfg15",
+        "cityscapes_fdgan_mask_smallD_ema200000_n3000_r500_colsample_anc500_cfg15",
+        "cityscapes_fdgan_mask_ema200000_n3000_r500_colsample_anc500_nocfg",
+        "cityscapes_fdgan_nomask_ema200000_n3000_r500_colsample_anc500",
+        "cityscapes_adm_ema200000_n3000_r250_colsample_anc_lv"]
+PAIRS = [(ROWS[0], r) for r in ROWS[1:]]      # FDGAN (full) against every other row
+B, SEED = 200, 0
+WHOLE_XLSX = "/content/gdrive/MyDrive/PhD/Cityscapes/Sets_200k_metrics/Cityscapes_200k_metrics.xlsx"   # Step14 whole-image sheet
+# =========================================================================================================================
+import os, glob, shutil, zipfile, subprocess, time
+import numpy as np, pandas as pd
+from dgm_eval.metrics.fd import compute_efficient_FD_with_reps
+assert all(n in globals() for n in ("REAL_DIR", "SETS_DIR", "RESULTS_DIR", "ENV", "NSAMPLE")), "run the cells above (incl. CONFIG) first"
+CACHE = "/content/dgm-eval/reps_cache"
+os.makedirs(CACHE, exist_ok=True)
+REAL_NAME = os.path.basename(os.path.normpath(REAL_DIR))
+
+def stage(tag):
+    zp = f"{SETS_DIR}/{tag}.zip"
+    assert os.path.exists(zp), f"zip not found: {zp}"
+    raw, gen = f"/content/dgm-eval/_raw_{tag}", f"/content/dgm-eval/gen_{tag}"
+    shutil.rmtree(raw, ignore_errors=True); shutil.rmtree(gen, ignore_errors=True); os.makedirs(gen)
+    with zipfile.ZipFile(zp) as z:
+        z.extractall(raw)
+    for dp, dn, fn in os.walk(raw):
+        for f in fn:
+            if f.startswith("sample_") and f.lower().endswith(".png"):
+                shutil.copy2(os.path.join(dp, f), os.path.join(gen, f))
+    shutil.rmtree(raw)
+    return gen
+
+def find_reps(name_part):
+    hits = [f for f in glob.glob(f"{CACHE}/reps_*.npz") if name_part in os.path.basename(f)]
+    return hits[0] if len(hits) == 1 else None
+
+def features(tag):
+    """Returns (real_features, generated_features) for one set, extracting them with dgm-eval if not cached."""
+    if find_reps(f"gen_{tag}") is None or find_reps(REAL_NAME) is None:
+        gen = stage(tag)
+        cmd = ["python", "-m", "dgm_eval", REAL_DIR, gen, "--model", "dinov2", "--metrics", "fd", "--device", "cuda", "--batch_size", "128",
+               "--nsample", str(NSAMPLE), "--seed", "42", "--save", "--output_dir", CACHE]
+        with open(f"{RESULTS_DIR}/{tag}_dinov2_features_for_bootstrap.txt", "w") as f:
+            p = subprocess.run(cmd, cwd="/content/dgm-eval", env=ENV, stdout=f, stderr=subprocess.STDOUT)
+        shutil.rmtree(gen, ignore_errors=True)
+        if p.returncode != 0 or find_reps(f"gen_{tag}") is None:
+            print(open(f"{RESULTS_DIR}/{tag}_dinov2_features_for_bootstrap.txt").read()[-2000:])
+            print("files in cache:", sorted(os.listdir(CACHE)))
+            raise RuntimeError(f"feature extraction failed for {tag}")
+    real = np.load(find_reps(REAL_NAME), allow_pickle=True)["reps"].astype(np.float64)
+    gen = np.load(find_reps(f"gen_{tag}"), allow_pickle=True)["reps"].astype(np.float64)
+    return real, gen
+
+t0 = time.time()
+feats = {}
+for tag in ROWS:
+    real, feats[tag] = features(tag)
+    print(f"features ready: {tag}  gen {feats[tag].shape}  real {real.shape}  ({time.time() - t0:.0f} s)")
+
+rng = np.random.default_rng(SEED)
+n_real = len(real)
+boot = {tag: np.zeros(B) for tag in ROWS}
+for b in range(B):
+    ir = rng.integers(0, n_real, n_real)                 # shared real resample -> paired comparison
+    rb = real[ir]
+    for tag in ROWS:
+        g = feats[tag]
+        boot[tag][b] = compute_efficient_FD_with_reps(rb, g[rng.integers(0, len(g), len(g))])
+    if (b + 1) % 25 == 0:
+        print(f"bootstrap {b + 1}/{B}  ({time.time() - t0:.0f} s)")
+
+try:
+    point = pd.read_excel(WHOLE_XLSX, index_col=0)["dinov2_fd"].astype(float)
+except Exception as e:
+    print("point FD not available:", e)
+    point = pd.Series(dtype=float)
+per_model = pd.DataFrame({
+    "fd_point": [point.get(t, np.nan) for t in ROWS],
+    "boot_mean": [boot[t].mean() for t in ROWS],
+    "boot_std": [boot[t].std(ddof=1) for t in ROWS],
+    "ci95_low": [np.percentile(boot[t], 2.5) for t in ROWS],
+    "ci95_high": [np.percentile(boot[t], 97.5) for t in ROWS],
+    "n_gen": [len(feats[t]) for t in ROWS], "n_real": n_real, "B": B}, index=ROWS)
+pairs = pd.DataFrame([{
+    "A": a, "B": b2, "diff_point": point.get(a, np.nan) - point.get(b2, np.nan),
+    "diff_boot_mean": (boot[a] - boot[b2]).mean(), "diff_ci95_low": np.percentile(boot[a] - boot[b2], 2.5),
+    "diff_ci95_high": np.percentile(boot[a] - boot[b2], 97.5), "P(A better)": float((boot[a] < boot[b2]).mean())} for a, b2 in PAIRS])
+out = f"{RESULTS_DIR}/Cityscapes_bootstrap_FD.xlsx"
+with pd.ExcelWriter(out) as w:
+    per_model.to_excel(w, sheet_name="per_model"); pairs.to_excel(w, sheet_name="pairs", index=False)
+pd.set_option("display.width", 220)
+print("\nper model (fd_point = sheet value; boot_* describe the spread, not a new FD):")
+print(per_model.round(2).to_string())
+print("\npaired differences A - B (negative = A better); P(A better) = share of replicates with FD_A < FD_B:")
+print(pairs.round(3).to_string(index=False))
+print(f"\nsaved {out}  ({time.time() - t0:.0f} s)")
