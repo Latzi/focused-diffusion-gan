@@ -132,12 +132,19 @@ set. Object-level metrics score a square crop around the conditioned box against
 measure object presence and box adherence with detectors. Every number in the paper traces back to a row of the
 sheets in `evaluation/sheets/`, and the audit scripts compare each sheet value with its raw dgm-eval output file.
 
+## Run it in Colab
+
+`colab/FDGAN_sample_demo.ipynb` installs the repository, fetches the Traffic Signs crops of our dataset release,
+writes the box files, loads a checkpoint you point it to and samples 16 images with the paper's settings. Open it in
+Colab from the `colab/` folder, choose a GPU runtime, and set the `CHECKPOINT` line.
+
 ## Data
 
 The three datasets are released separately:
 [object-centric-low-data-datasets](https://github.com/Latzi/object-centric-low-data-datasets) (Traffic Signs with
 images and YOLO labels; reconstruction assets for Cityscapes-Pedestrian and COCO potted plant). The loader here reads
-one JSON box file per image; a script that writes those files from the release's box tables is on its way.
+one JSON box file per image; `tools/make_box_json_from_release.py` writes those files from the release's YOLO labels
+(one box per crop, the largest by default; the release holds up to five per crop).
 
 ## Checkpoints and sample sets
 
