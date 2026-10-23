@@ -136,6 +136,8 @@ sheets in `evaluation/sheets/`, and the audit scripts compare each sheet value w
 
 ## Run it in Colab
 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Latzi/focused-diffusion-gan/blob/main/colab/FDGAN_train_and_sample.ipynb)
+
 `colab/FDGAN_train_and_sample.ipynb` does the whole thing on Colab: it installs the repository, prepares the data
 (the Traffic Signs crops of our release, or your own images with YOLO labels, turned into 256 px crops with one box
 each by `tools/prepare_dataset.py`), trains FDGAN with the paper's flags from scratch or from a checkpoint, with the
@@ -149,7 +151,21 @@ The three datasets are released separately:
 [object-centric-low-data-datasets](https://github.com/Latzi/object-centric-low-data-datasets) (Traffic Signs with
 images and YOLO labels; reconstruction assets for Cityscapes-Pedestrian and COCO potted plant). The loader here reads
 one JSON box file per image; `tools/make_box_json_from_release.py` writes those files from the release's YOLO labels
-(one box per crop, the largest by default; the release holds up to five per crop).
+(one box per crop, the largest by default; the release holds up to five per crop), and `tools/prepare_dataset.py`
+does the same for any images with YOLO labels, cutting 256 px crops around the chosen box.
+
+**What a training set looks like.** Two folders:
+
+```text
+DATA_DIR/                 the crops: RGB, exactly 256 x 256, jpg or png; sub-folders are searched recursively
+    crop_0001.png
+BB_DIR/                   one JSON per crop, same file stem, flat
+    crop_0001.json        {"x": 111, "y": 55, "w": 122, "h": 130}
+```
+
+`x`, `y` is the top-left corner in pixels and `w`, `h` the width and height with `--bb_is_xywh True` (what both tools
+write); without the flag, `w`, `h` are read as the exclusive bottom-right corner. One box per crop. The training
+script takes `--data_dir` and `--bb_dir`; the sampler needs only `--bb_dir`.
 
 ## Checkpoints and sample sets
 
