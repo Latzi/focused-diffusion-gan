@@ -134,9 +134,12 @@ sheets in `evaluation/sheets/`, and the audit scripts compare each sheet value w
 
 ## Run it in Colab
 
-`colab/FDGAN_sample_demo.ipynb` installs the repository, fetches the Traffic Signs crops of our dataset release,
-writes the box files, loads a checkpoint you point it to and samples 16 images with the paper's settings. Open it in
-Colab from the `colab/` folder, choose a GPU runtime, and set the `CHECKPOINT` line.
+`colab/FDGAN_train_and_sample.ipynb` does the whole thing on Colab: it installs the repository, prepares the data
+(the Traffic Signs crops of our release, or your own images with YOLO labels, turned into 256 px crops with one box
+each by `tools/prepare_dataset.py`), trains FDGAN with the paper's flags from scratch or from a checkpoint, with the
+checkpoints on your Google Drive so that a run continues after a disconnect, and samples from the model with the
+boxes drawn. Open it from the `colab/` folder and choose a GPU runtime. The paper's horizon of 200,000 iterations at
+batch 16 is an A100 day; on a T4 the notebook runs the same recipe at a smaller batch over several sessions.
 
 ## Data
 
