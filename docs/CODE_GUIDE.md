@@ -93,7 +93,10 @@ Ours. It replaces ADM's `image_datasets.py`. `load_data` lists the images, finds
 `ImageDataset.__getitem__` loads the image, reads the box JSON of the same stem, converts it to exclusive corner
 coordinates (Cityscapes and COCO store corners; Traffic Signs stores x, y, width, height, hence `bb_is_xywh`),
 mirrors the box together with the image on a random flip, and returns the image in [-1, 1] with
-`{"image_filenames", "flip", "bb"}`.
+`{"image_filenames", "flip", "bb"}`. One box per image: if a JSON file holds a list, the first entry is used. The
+mask built from it is a binary image and could hold several rectangles, but the box MSE, the small-discriminator
+crop, the sampler and the object-level metrics are all written for one box, and no multi-box model was trained or
+evaluated.
 
 ## scripts/image_train_Run2_3_10_FDGAN_COCO_LateBand.py
 

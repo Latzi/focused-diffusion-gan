@@ -19,7 +19,9 @@ we ran them; four of them carry small leftovers from our earlier experiments tha
 1. **A box mask as a fourth input channel.** The loader reads one bounding box per image and the training loop
    rasterises it into a binary mask. The first convolution of the U-Net is widened from 3 to 4 input channels; the new
    weights start at 0.1 times the mean of the RGB weights and the mask is multiplied by 50 before it is concatenated
-   with the image. Nothing else in the U-Net changes. Flag: `--use_bb_mask_cond`.
+   with the image. Nothing else in the U-Net changes. Flag: `--use_bb_mask_cond`. Every reported run conditions on
+   one box per image. The mask is a binary image and could carry several rectangles, but no multi-box model was
+   trained or evaluated, so the tools in this repository write one box per crop.
 
 2. **An adversarial stage on a band of timesteps.** For the first 40,000 iterations the model trains exactly like ADM.
    After that, a sample whose timestep falls inside a band of 120 reverse-time steps also goes through the adversarial
