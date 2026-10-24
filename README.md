@@ -117,13 +117,18 @@ Traffic Signs boxes are stored as x, y, width, height, so the Traffic jobs are t
 Sampling:
 
 ```bash
-sbatch --export=ALL,STEP=200000,NUM=3000,RESP=500,EXTRA="--mask_cfg_scale 2.0" jobs/sample_cityscapes_fdgan_mask.sh
+sbatch --export=ALL,STEP=200000,NUM=3000,RESP=500,COLOR=sample,EXTRA="--sigma_mode learned --mask_cfg_scale 2.0" jobs/sample_cityscapes_fdgan_mask.sh
 ```
 
 `STEP` picks the checkpoint (EMA weights by default), `NUM` the number of images, `RESP` the respacing, `COLOR` the
-colour guidance mode and `EXTRA` any further sampler flag. Boxes are taken from the dataset's box files in sorted order,
-so sample i of every set is conditioned on the same box. The sampler writes `sample_000000.png` onwards plus a
-`meta.json` with the box of every image.
+colour guidance mode and `EXTRA` any further sampler flag. Every set in the paper's tables was sampled this way: 500
+ancestral steps with the learned variance, mask guidance 1.5 or 2.0, and the colour guidance towards the colour
+statistics of the training crops (`COLOR=sample`; the `colsample` in the set names). The colour guidance matters:
+without it the samples of these 128-channel models carry strong global colour casts. The statistics files for
+Cityscapes and COCO are in `tools/color_stats/`; `tools/real_color_stats.py` computes them for any training folder
+(the Traffic Signs file there was computed from the crops of our dataset release). Boxes are taken from the
+dataset's box files in sorted order, so sample i of every set is conditioned on the same box. The sampler writes
+`sample_000000.png` onwards plus a `meta.json` with the box of every image and every setting used.
 
 ## Evaluation
 

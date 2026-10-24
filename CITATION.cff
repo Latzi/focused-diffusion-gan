@@ -16,7 +16,7 @@ authors:
 repository-code: "https://github.com/Latzi/focused-diffusion-gan"
 license: MIT
 version: "0.1.0"
-date-released: 2026-10-23
+date-released: 2026-10-24
 preferred-citation:
   type: article
   title: "Focused Diffusion-GAN: Object-Centric Image Generation Using Integrated GAN and Diffusion Frameworks"
