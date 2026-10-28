@@ -1,0 +1,125 @@
+# ==== ADVBOX BOOTSTRAP: paired bootstrap of the three advbox rows WITHOUT changing the existing replicates ==================
+# Paste as a new cell at the end of the Cityscapes Step14 notebook and run it after the CONFIG cell (same session).
+# The 24 Oct bootstrap drew, for every replicate, one resample of the real features (shared by all rows) and then one
+# resample per row, all from ONE random stream (default_rng(0), rows in the order of the sheet). Re-running that cell with
+# three more rows would change every existing replicate and overwrite Cityscapes_bootstrap_replicates.csv. This cell instead
+#   1. re-extracts the DINOv2 features of the real set, the FDGAN reference row and the three advbox rows (dgm-eval --save);
+#   2. replays the 24 Oct random stream exactly (the real draw plus the 26 row draws per replicate) so that the advbox rows
+#      are scored on the SAME real resample as every existing row - the paired comparison stays valid;
+#   3. checks the replay by recomputing the FDGAN reference row for the first replicates against the existing csv;
+#   4. draws the advbox resamples from a separate stream and writes TWO NEW files next to the existing ones:
+#      Cityscapes_bootstrap_replicates_advbox.csv (200 x 3) and Cityscapes_bootstrap_FD_advbox.xlsx (per_model + pairs).
+# Nothing existing is written. ~3-4 min per feature extraction (5 sets), then about a minute for the replicates.
+B, SEED, SEED_NEW = 200, 0, 1
+OLD_CSV = f"{RESULTS_DIR}/Cityscapes_bootstrap_replicates.csv"       # the 24 Oct replicates, read only
+# ===========================================================================================================================
+import os, glob, shutil, zipfile, subprocess, time
+import numpy as np, pandas as pd
+from dgm_eval.metrics.fd import compute_efficient_FD_with_reps
+assert all(n in globals() for n in ("REAL_DIR", "SETS_DIR", "RESULTS_DIR", "XLSX", "ENV", "NSAMPLE")), "run the cells above (incl. CONFIG) first"
+sheet = pd.read_excel(XLSX, index_col=0); sheet.index = sheet.index.astype(str)
+old = pd.read_csv(OLD_CSV, index_col=0)
+assert old.shape == (B, 26), f"unexpected replicate file {old.shape}; expected (200, 26)"
+OLD_ROWS = list(old.columns)                                            # the 24 Oct ROWS order = the column order of the csv
+A = [t for t in OLD_ROWS if "fdgan_mask_" in t and "smallD" not in t and "rep2" not in t and t.endswith("anc500_cfg15")]
+assert len(A) == 1, A
+A = A[0]
+NEW_ROWS = sorted(t for t in sheet.index if "fdgan_advbox" in t and "_anc500_" in t)
+assert len(NEW_ROWS) == 3, NEW_ROWS
+assert not any(t in OLD_ROWS for t in NEW_ROWS)
+OUT_CSV = f"{RESULTS_DIR}/Cityscapes_bootstrap_replicates_advbox.csv"
+OUT_XLSX = f"{RESULTS_DIR}/Cityscapes_bootstrap_FD_advbox.xlsx"
+for f in (OUT_CSV, OUT_XLSX):
+    assert not os.path.exists(f), f"{f} exists - delete or rename it first; nothing is overwritten"
+print("reference row A:", A, "\nnew rows:", *NEW_ROWS, sep="\n  ")
+
+CACHE = "/content/dgm-eval/reps_cache"
+os.makedirs(CACHE, exist_ok=True)
+REAL_NAME = os.path.basename(os.path.normpath(REAL_DIR))
+
+def stage(tag):
+    zp = f"{SETS_DIR}/{tag}.zip"
+    assert os.path.exists(zp), f"zip not found: {zp}"
+    raw, gen = f"/content/dgm-eval/_raw_{tag}", f"/content/dgm-eval/gen_{tag}"
+    shutil.rmtree(raw, ignore_errors=True); shutil.rmtree(gen, ignore_errors=True); os.makedirs(gen)
+    with zipfile.ZipFile(zp) as z:
+        z.extractall(raw)
+    for dp, dn, fn in os.walk(raw):
+        for f in fn:
+            if f.startswith("sample_") and f.lower().endswith(".png"):
+                shutil.copy2(os.path.join(dp, f), os.path.join(gen, f))
+    shutil.rmtree(raw)
+    return gen
+
+def find_reps(name_part):
+    hits = [f for f in glob.glob(f"{CACHE}/reps_*.npz") if os.path.basename(f).startswith(f"reps_{name_part}_dinov2_")]
+    return hits[0] if len(hits) == 1 else None
+
+def features(tag):
+    if find_reps(f"gen_{tag}") is None or find_reps(REAL_NAME) is None:
+        gen = stage(tag)
+        cmd = ["python", "-m", "dgm_eval", REAL_DIR, gen, "--model", "dinov2", "--metrics", "fd", "--device", "cuda", "--batch_size", "128",
+               "--nsample", str(NSAMPLE), "--seed", "42", "--save", "--output_dir", CACHE]
+        with open(f"{RESULTS_DIR}/{tag}_dinov2_features_for_bootstrap.txt", "w") as f:
+            p = subprocess.run(cmd, cwd="/content/dgm-eval", env=ENV, stdout=f, stderr=subprocess.STDOUT)
+        shutil.rmtree(gen, ignore_errors=True)
+        if p.returncode != 0 or find_reps(f"gen_{tag}") is None:
+            print(open(f"{RESULTS_DIR}/{tag}_dinov2_features_for_bootstrap.txt").read()[-2000:])
+            raise RuntimeError(f"feature extraction failed for {tag}")
+    real = np.load(find_reps(REAL_NAME), allow_pickle=True)["reps"].astype(np.float64)
+    gen = np.load(find_reps(f"gen_{tag}"), allow_pickle=True)["reps"].astype(np.float64)
+    return real, gen
+
+t0 = time.time()
+feats = {}
+for tag in [A] + NEW_ROWS:
+    real, feats[tag] = features(tag)
+    print(f"features ready: {tag}  gen {feats[tag].shape}  real {real.shape}  ({time.time() - t0:.0f} s)")
+n_real = len(real)
+assert n_real == 3000 and all(len(g) == 3000 for g in feats.values()), "the 24 Oct run used 3,000 real and 3,000 generated features per row"
+N_OLD = 3000                                                            # every 24 Oct row had 3,000 generated features (per_model sheet)
+
+# ---- replay the 24 Oct stream: real draw, then the 26 row draws, per replicate; keep the real draw and the draw of row A
+rng = np.random.default_rng(SEED)
+real_idx, a_idx = [], []
+for b in range(B):
+    real_idx.append(rng.integers(0, n_real, n_real))
+    for tag in OLD_ROWS:
+        idx = rng.integers(0, N_OLD, N_OLD)
+        if tag == A: a_idx.append(idx)
+N_CHECK = 5
+check = np.array([compute_efficient_FD_with_reps(real[real_idx[b]], feats[A][a_idx[b]]) for b in range(N_CHECK)])
+dev = np.abs(check - old[A].values[:N_CHECK])
+print(f"\nreplay check on row A, replicates 0-{N_CHECK - 1}: recomputed {np.round(check, 3)}  stored {np.round(old[A].values[:N_CHECK], 3)}  max |diff| {dev.max():.4f}")
+assert dev.max() < 0.5, "the replay does not reproduce the stored replicates - stop and report"
+
+# ---- advbox rows: same real resample per replicate, own generated resample from a separate stream
+rng2 = np.random.default_rng(SEED_NEW)
+boot = {tag: np.zeros(B) for tag in NEW_ROWS}
+for b in range(B):
+    rb = real[real_idx[b]]
+    for tag in NEW_ROWS:
+        g = feats[tag]
+        boot[tag][b] = compute_efficient_FD_with_reps(rb, g[rng2.integers(0, len(g), len(g))])
+    if (b + 1) % 50 == 0: print(f"bootstrap {b + 1}/{B}  ({time.time() - t0:.0f} s)")
+new = pd.DataFrame(boot, index=old.index)
+new.to_csv(OUT_CSV, index_label="replicate")
+
+point = sheet["dinov2_fd"].astype(float)
+per_model = pd.DataFrame({"fd_point": [point.get(t, np.nan) for t in NEW_ROWS], "boot_mean": [boot[t].mean() for t in NEW_ROWS],
+                          "boot_std": [boot[t].std(ddof=1) for t in NEW_ROWS], "ci95_low": [np.percentile(boot[t], 2.5) for t in NEW_ROWS],
+                          "ci95_high": [np.percentile(boot[t], 97.5) for t in NEW_ROWS], "n_gen": 3000, "n_real": n_real, "B": B}, index=NEW_ROWS)
+refs = [t for t in OLD_ROWS if ("fdgan_mask_" in t and "smallD" not in t and "rep2" not in t and ("anc500_cfg15" in t or "anc500_cfg20" in t or "anc500_nocfg" in t) and "win" not in t)
+        or ("adm_mask_ema" in t and ("anc500_cfg15" in t or "anc500_cfg20" in t or "anc500_nocfg" in t))]
+pairs = pd.DataFrame([{"A": a, "B": r, "diff_point": point.get(a, np.nan) - point.get(r, np.nan),
+                       "diff_boot_mean": (boot[a] - old[r].values).mean(), "diff_ci95_low": np.percentile(boot[a] - old[r].values, 2.5),
+                       "diff_ci95_high": np.percentile(boot[a] - old[r].values, 97.5), "P(A better)": float((boot[a] < old[r].values).mean())}
+                      for a in NEW_ROWS for r in refs])
+with pd.ExcelWriter(OUT_XLSX) as w:
+    per_model.to_excel(w, sheet_name="per_model"); pairs.to_excel(w, sheet_name="pairs", index=False)
+pd.set_option("display.width", 250)
+print("\nper model (fd_point = sheet value; boot_* describe the spread, not a new FD):")
+print(per_model.round(2).to_string())
+print("\npaired differences advbox - reference row (positive = advbox worse); P(A better) = share of replicates with FD_advbox < FD_ref:")
+print(pairs.round(3).to_string(index=False))
+print(f"\nsaved {OUT_CSV}\nsaved {OUT_XLSX}  ({time.time() - t0:.0f} s)")
