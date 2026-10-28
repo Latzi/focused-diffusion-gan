@@ -15,7 +15,7 @@ earlier COCO notebook kept for provenance.
 ## colab_cells/
 
 Cells we paste into the notebooks: unpacking a transfer bundle (`Step33`), filling the coverage-test column
-(`Step14_CT_fill_cell*`), the paired bootstrap (`Step14_bootstrap_cell*`, `Step14_bootstrap_finish_cell`), the custom
+(`Step14_CT_fill_cell*`), the paired bootstrap (`Step14_bootstrap_cell*`, `Step14_bootstrap_finish_cell`; `Step14_bootstrap_cell_advbox` scores the three box-gradient sets on the same real resamples without redrawing the existing replicates), the custom
 detectors for Traffic Signs and COCO (`Step16_*_custom_detector_cell`), the guidance-curve scoring (`Step24`) and the
 extraction of the samples used in the figures (`Step41`).
 
@@ -26,14 +26,18 @@ extraction of the samples used in the figures (`Step41`).
 - `Step14_<dataset>_bootstrap_replicates.csv`: the 200 replicate FD values of every set, from one shared resample of
   the real set per replicate, so that any pair can be re-derived.
 - `Step16_<dataset>_object_metrics.xlsx`: the object-level metrics per set.
+- `Step14_Cityscapes_bootstrap_replicates_advbox.csv` and `Step14_Cityscapes_bootstrap_FD_advbox.xlsx`: the replicates and
+  paired differences of the three box-gradient sets, drawn on the same real resamples as the 26 columns of the main
+  replicate file, which is left as it was so that every earlier interval stays reproducible.
 
 The set names encode the model, the checkpoint, the number of images, the respacing and the sampling options, in the
 same way as the sampling job's output folder.
 
 ## tables/
 
-`build_step23_tables.py` reads the sheets and the replicate files and writes the LaTeX of Tables 1 to 3 and a JSON
-with every interval quoted in the text. Paired differences are point differences between the two sets; the intervals
+`Step59_build_tables_24d.py` reads the sheets and the replicate files (the main Cityscapes file and the box-gradient file
+side by side) and writes `Step59_Tables_1_2_3_LaTeX.tex`, the LaTeX of Tables 1 to 3 as they stand in the paper, and
+`Step59_numbers_for_text.json` with every interval quoted in the text. Paired differences are point differences between the two sets; the intervals
 come from the replicates.
 
 ## audit/
