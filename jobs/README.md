@@ -27,6 +27,7 @@ Rows (the flags that differ are listed in `tools/make_sbatch_files.py`):
 | `fdgan_mask_smallD` | FDGAN plus the small ROI discriminator |
 | `fdgan_mask_rep2`, `adm_mask_rep2` | second training seed of FDGAN and FDGAN\* on Cityscapes: the same files with a new tag, a second independent run |
 | `fdgan_wideband35` | the wide-band run on Cityscapes: `--tmin_end 600 --band_width 350 --max_gan_per_microbatch 8`, sampled with `--bump_tmin_rev 600 --bump_tmax_rev 950` |
+| `fdgan_advbox` | the box-gradient run on Cityscapes: `--adv_grad_in_box_only True` with the `_advbox` copies of the training loop and the training script, written by `tools/make_advbox_files.py`; the generator's adversarial gradient reaches only the box pixels while the discriminator still sees the whole image |
 
 `*_lsun.sh` are the COCO runs; they start from an LSUN-pretrained ADM checkpoint instead of random weights. The
 Cityscapes global-noise pair calls the `_globalnoise` copies of the training script and the sampler.

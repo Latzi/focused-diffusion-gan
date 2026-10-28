@@ -66,9 +66,9 @@ diffusion loss trains, and the mask channel stays. **ADM** is FDGAN\* with `--us
 | Folder | What is in it |
 |---|---|
 | `guided_diffusion/` | Our training loop `train_util_coco_fdgan_late_band.py` and our loader `image_datasets_Run2_3_10_COCO.py`, next to the ADM modules of guided-diffusion as we ran them (`unet.py`, `gaussian_diffusion.py`, `respace.py`, `script_util.py`, `fp16_util.py`, `nn.py`, `resample.py`, `dist_util.py`, `logger.py`, `losses.py`). The `_lsun` and `_globalnoise` copies of the loop are explained in the code guide. |
-| `scripts/` | `image_train_Run2_3_10_FDGAN_COCO_LateBand.py` (training entry point: discriminator, 4-channel U-Net, loop) and `image_sample_fdgan_4ch.py` (sampler), with their `_lsun` and `_globalnoise` copies. |
-| `jobs/` | The Slurm job files of every reported run as submitted on OzSTAR, including the second training seed and the wide-band run, and `jobs/README.md` on how to read them. Paths are the cluster's. |
-| `tools/` | `make_sbatch_files.py` (writes the job files; all shared flags live there), `objeval_core.py` (object-level metrics), `real_color_stats.py` (colour statistics of the training images), `color_stats/` (the statistics we used). |
+| `scripts/` | `image_train_Run2_3_10_FDGAN_COCO_LateBand.py` (training entry point: discriminator, 4-channel U-Net, loop) and `image_sample_fdgan_4ch.py` (sampler), with their `_lsun`, `_globalnoise` and `_advbox` copies. |
+| `jobs/` | The Slurm job files of every reported run as submitted on OzSTAR, including the second training seed, the wide-band run and the box-gradient run, and `jobs/README.md` on how to read them. Paths are the cluster's. |
+| `tools/` | `make_sbatch_files.py` (writes the job files; all shared flags live there), `make_advbox_files.py` (writes the `_advbox` copies of the loop and the training script for the box-gradient run), `objeval_core.py` (object-level metrics), `real_color_stats.py` (colour statistics of the training images), `color_stats/` (the statistics we used). |
 | `evaluation/` | Notebooks, Colab cells, the metric sheets with every number in the paper, the bootstrap replicates, the script that builds the tables and intervals from the sheets, and the audit scripts. See `evaluation/README.md`. |
 | `figures/` | The scripts that build the sample grids, the final figure files and the editable architecture diagram. |
 | `downstream_yolo/` | Scripts of the downstream YOLO11 study (real images plus FDGAN images); the runs are in progress. |
@@ -108,6 +108,7 @@ The file name is `train_<dataset>_<row>.sh`. The rows differ only in the flags l
 | `fdgan_mask_smallD` | plus small ROI discriminator | `--enable_small_roi_d True` |
 | `fdgan_mask_rep2`, `adm_mask_rep2` | second training seed of FDGAN and FDGAN\* | same flags, a second independent run |
 | `fdgan_wideband35` | wide-band run | `--tmin_end 600 --band_width 350 --max_gan_per_microbatch 8` |
+| `fdgan_advbox` | adversarial gradient confined to the box | `--adv_grad_in_box_only True`, with the `_advbox` loop and script |
 
 Everything else is shared: 256 px, 128 base channels, 2 residual blocks, attention at 16, learned sigma, 1,000 linear
 diffusion steps, batch 16 in micro-batches of 8, fp16, lr 1e-4 annealed to zero at 200,000 iterations, EMA 0.9999.

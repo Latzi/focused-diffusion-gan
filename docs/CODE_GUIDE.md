@@ -79,12 +79,16 @@ Helpers at the top of the file:
 - `_save_debug_pairs`: every `image_save_every` steps, writes the perturbed input and the clean-image prediction of a
   few in-band samples with their boxes drawn, for eyeballing a run.
 
-Two copies of the loop sit next to it. `train_util_coco_fdgan_late_band_lsun.py` is the one the COCO jobs import; it
+Three copies of the loop sit next to it. `train_util_coco_fdgan_late_band_lsun.py` is the one the COCO jobs import; it
 differs from the main file in three lines: when a 3-channel pretrained checkpoint is loaded into the 4-channel model,
 the mask-channel weights get the copy-mean initialisation (0.1 times the mean of the loaded RGB filters) instead of
 zeros, which matters only when a run starts from a checkpoint, as the COCO runs do from an LSUN-trained ADM.
 `train_util_coco_fdgan_late_band_globalnoise.py` is byte-identical to the main file; the Cityscapes global-noise job
 imports it through its own copy of the training script.
+`train_util_coco_fdgan_late_band_advbox.py` adds one flag, `adv_grad_in_box_only`: in the generator's adversarial pass the
+clean-image prediction outside the box is detached, so the adversarial gradient reaches only the box pixels while the
+discriminator still sees the whole image. The Cityscapes box-gradient job imports it through its own copy of the training
+script; both files are written from the main ones by `tools/make_advbox_files.py`.
 
 ## guided_diffusion/image_datasets_Run2_3_10_COCO.py
 
