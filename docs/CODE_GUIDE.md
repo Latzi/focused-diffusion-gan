@@ -161,9 +161,3 @@ See `evaluation/README.md`.
 grids: samples paired by index so that each column shows the same box across models). `build_guidance_figure.py`
 plots the guidance curves. `figure2/` holds the architecture diagram as an editable draw.io file, the PDF used in the
 paper and the scripts that export it.
-
-## downstream_yolo/
-
-`build_fdgan2026_sets.py` builds the training sets of the downstream study: the real training images plus a fraction
-of FDGAN images, each FDGAN image labelled with its conditioning box after a detector trained on real images confirms an
-object in that box. `fdgan2026_val.py` evaluates the trained detectors. The runs are in progress.
