@@ -71,7 +71,6 @@ diffusion loss trains, and the mask channel stays. **ADM** is FDGAN\* with `--us
 | `tools/` | `make_sbatch_files.py` (writes the job files; all shared flags live there), `make_advbox_files.py` (writes the `_advbox` copies of the loop and the training script for the box-gradient run), `objeval_core.py` (object-level metrics), `real_color_stats.py` (colour statistics of the training images), `color_stats/` (the statistics we used). |
 | `evaluation/` | Notebooks, Colab cells, the metric sheets with every number in the paper, the bootstrap replicates, the script that builds the tables and intervals from the sheets, and the audit scripts. See `evaluation/README.md`. |
 | `figures/` | The scripts that build the sample grids, the final figure files and the editable architecture diagram. |
-| `downstream_yolo/` | Scripts of the downstream YOLO11 study (real images plus FDGAN images); the runs are in progress. |
 | `docs/CODE_GUIDE.md` | File-by-file guide: what each function does and where it departs from ADM. |
 | `setup.py`, `requirements.txt`, `environment_cluster.txt` | Package install, the pinned versions we used, and the full package list of the cluster environment. |
 
