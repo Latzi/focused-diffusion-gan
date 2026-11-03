@@ -7,7 +7,7 @@ import os, sys
 import numpy as np, pandas as pd
 sys.stdout.reconfigure(encoding="utf-8")
 W = r"C:\Dropbox\Vasile Marian Dropbox\Vasile Marian\iMatrix_Business\Phd\Progress_Review_3\Papers\Latest_Current\FDGAN_IVC\10_Revision_Workplan"
-N = r"C:\Users\latzi\AppData\Local\Temp\claude\C--Users-latzi-Downloads-New-folder--5-\2874049a-ada9-431d-826d-b7ea81ba130f\scratchpad\bundleC_in"
+N = r"C:\Users\latzi\FDGAN_bundles\bundleC_in"   # the four files of 22 Oct 11:22 as downloaded from the cluster
 NEW_ROWS = ["cityscapes_adm_mask_rep2_ema200000_n3000_r500_colsample_anc500_nocfg",
             "cityscapes_fdgan_mask_rep2_ema200000_n3000_r500_colsample_anc500_nocfg"]
 

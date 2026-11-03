@@ -11,7 +11,7 @@ import os, io, json, sys
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 sys.stdout.reconfigure(encoding="utf-8")
-SP = "C:/Users/latzi/AppData/Local/Temp/claude/C--Users-latzi-Downloads-New-folder--5-/2874049a-ada9-431d-826d-b7ea81ba130f/scratchpad"
+SP = "C:/Users/latzi/FDGAN_bundles"
 FS = os.path.join(SP, "figsamples")   # figure_samples_23Oct.zip = boxes 0-11 of every set (lot A); the second extraction (figure_samples_lotA.zip) carried wrong files for the four FDGAN sets and is NOT used
 IM = "C:/Dropbox/Vasile Marian Dropbox/Vasile Marian/iMatrix_Business/Phd/Progress_Review_3/Papers/Latest_Current/FDGAN_IVC/11_Overleaf_Source/Overleaf_current_22Oct/images"
 OUT = "C:/Dropbox/Vasile Marian Dropbox/Vasile Marian/iMatrix_Business/Phd/Progress_Review_3/Papers/Latest_Current/FDGAN_IVC/10_Revision_Workplan/Step45_figures"

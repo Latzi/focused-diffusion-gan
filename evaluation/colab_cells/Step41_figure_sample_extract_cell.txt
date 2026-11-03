@@ -2,7 +2,7 @@
 # Run in any Colab session after mounting Drive (no GPU needed; about 2-4 minutes). For every sample set listed below it
 # copies the first K samples by index (sample index i = box i in sorted order, identical for every set, so the rows of the
 # figures are box-matched across models), their meta.json records (bb_stem, bb_xyxy) and the real image each box came from.
-# Output: /content/gdrive/MyDrive/PhD/figure_samples_23Oct.zip  (a few tens of MB). Download it and send it to Claude.
+# Output: /content/gdrive/MyDrive/PhD/figure_samples_23Oct.zip  (a few tens of MB). Download it for the figure script (figures/build_figures.py).
 K = 12                                                            # samples per set (indices 0..K-1)
 OUT_ZIP = "/content/gdrive/MyDrive/PhD/figure_samples_23Oct.zip"
 # dataset -> (Sets_200k folder, real-image zip, [substring patterns of the sets wanted; a pattern must match exactly one zip])
