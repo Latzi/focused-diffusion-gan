@@ -174,8 +174,17 @@ script takes `--data_dir` and `--bb_dir`; the sampler needs only `--bb_dir`.
 
 ## Checkpoints and sample sets
 
-The EMA checkpoints and the generated sets behind every reported row will be archived separately; the link will be
-added here.
+The final EMA checkpoints (iteration 200,000) of the 23 models trained with this code and the 72 generated sample sets
+behind their reported results are archived on Zenodo:
+
+- the checkpoints and the Traffic Signs and COCO potted plant sample sets: https://doi.org/10.5281/zenodo.23750546
+  (open access, CC BY 4.0);
+- the Cityscapes-Pedestrian sample sets: https://doi.org/10.5281/zenodo.23786063 (access on request to holders of a
+  Cityscapes licence, because the images derive from Cityscapes).
+
+Each checkpoint tar holds one folder per training run (`ema_0.9999_200000.pt`); each sample tar holds one zip per set
+with the 3,000 PNG images and a `meta.json` giving the conditioning box and the real training image of every image.
+`SHA256SUMS.txt` lists the SHA-256 checksum of every tar of both records.
 
 ## Citing
 
